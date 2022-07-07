@@ -1,0 +1,6 @@
+instance_regex: '.+'
+tags:
+  present:
+    - tagger_managed
+  absent:
+    - foo

@@ -1,0 +1,43 @@
+project_name: 'linode-tagger'
+builds:
+  - env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - windows
+      - darwin
+    binary: tagger
+archives:
+  - replacements:
+      darwin: Darwin
+      linux: Linux
+      windows: Windows
+      386: i386
+      amd64: x86_64
+checksum:
+  name_template: 'checksums.txt'
+snapshot:
+  name_template: "{{ incpatch .Version }}-next"
+nfpms:
+  - package_name: 'linode-tagger'
+    homepage: 'https://github.com/tjhop/tagger'
+    maintainer: 'TJ Hoplock <t.hoplock@gmail.com>'
+    description: 'Tool to bulk enforce API tag sets on Linode instances'
+    formats:
+      - apk
+      - deb
+      - rpm
+    bindir: /usr/bin
+    contents:
+      - src: ./README.md
+        dst: /usr/share/doc/tjhop/mango/README.md
+      - src: ./packaging/etc/tagger.yml
+        dst: /usr/share/doc/tjhop/tagger/example/tagger.yml
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^Merge pull request'
+      - '^ci(?:\(\w+\))?\!?:'
+      - '^docs(?:\(\w+\))?\!?:'
+      - '^test(?:\(\w+\))?\!?:'
