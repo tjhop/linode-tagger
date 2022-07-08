@@ -85,8 +85,8 @@ func checkLinodeTagsAgainstConfig(linodes []linodego.Instance) (instanceTagMap, 
 	return linodeIDTagMap, nil
 }
 
-func updateLinodeInstanceTags(ctx context.Context, client linodego.Client, id int, tags []string) error {
-	_, err := client.UpdateInstance(ctx, id, linodego.InstanceUpdateOptions{Tags: &tags})
+func updateLinodeInstanceTags(ctx context.Context, client linodego.Client, id int, tags *[]string) error {
+	updatedInstance, err := client.UpdateInstance(ctx, id, linodego.InstanceUpdateOptions{Tags: tags})
 	if err != nil {
 		return err
 	}
@@ -96,7 +96,7 @@ func updateLinodeInstanceTags(ctx context.Context, client linodego.Client, id in
 
 func updateAllTags(ctx context.Context, client linodego.Client, tagMap instanceTagMap) error {
 	for id, tags := range tagMap {
-		if err := updateLinodeInstanceTags(ctx, client, id, tags); err != nil {
+		if err := updateLinodeInstanceTags(ctx, client, id, &tags); err != nil {
 			return err
 		}
 	}
