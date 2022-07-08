@@ -35,6 +35,10 @@ func newLinodeClient() linodego.Client {
 	}
 
 	client := linodego.NewClient(oauth2Client)
+	// linode api debug output is a firehose, only enable at trace
+	if log.IsLevelEnabled(log.TraceLevel) {
+		client.SetDebug(true)
+	}
 	return client
 }
 
