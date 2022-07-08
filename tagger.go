@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -89,6 +90,10 @@ func updateLinodeInstanceTags(ctx context.Context, client linodego.Client, id in
 	updatedInstance, err := client.UpdateInstance(ctx, id, linodego.InstanceUpdateOptions{Tags: tags})
 	if err != nil {
 		return err
+	}
+
+	if !slices.Equal(updatedInstance.Tags, *tags) {
+		return errors.New("Call to update instance did not result in the expected tag set")
 	}
 
 	return nil
