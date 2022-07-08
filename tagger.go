@@ -24,7 +24,7 @@ type instanceTagMap map[int][]string
 func newLinodeClient() linodego.Client {
 	apiKey, ok := os.LookupEnv("LINODE_TOKEN")
 	if !ok {
-		log.Fatal("Could not find LINODE_TOKEN, please assert it is set.")
+		log.Fatal("Could not find LINODE_TOKEN environment variable, please assert it is set.")
 	}
 	tokenSource := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: apiKey})
 
@@ -179,6 +179,7 @@ func main() {
 		log.Infof("Log level set to: %s", level)
 	}
 
+	log.Info("Gathering linode instances on this account")
 	client := newLinodeClient()
 	ctx := context.Background()
 	linodes, err := client.ListInstances(ctx, nil)
@@ -186,6 +187,7 @@ func main() {
 		log.WithFields(log.Fields{"err": err}).Fatal("Failed to list Linodes")
 	}
 
+	log.Info("Checking linode instance tags against config file")
 	tagMap, err := checkLinodeTagsAgainstConfig(linodes)
 	if err != nil {
 		log.WithFields(log.Fields{
@@ -193,6 +195,7 @@ func main() {
 		}).Error("Failed to retrieve tag map of instances that need to be updated")
 	}
 
+	log.Info("Applying new tags to instances that need updating")
 	if err := updateAllTags(ctx, client, tagMap); err != nil {
 		log.WithFields(log.Fields{
 			"err": err,
