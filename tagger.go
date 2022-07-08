@@ -143,11 +143,17 @@ func main() {
 	viper.BindPFlags(flag.CommandLine)
 
 	// get config
-	viper.SetConfigName("tagger")
+	configFile := viper.GetString("config")
 	viper.SetConfigType("yaml")
-	viper.AddConfigPath("/etc/tagger/")
-	viper.AddConfigPath("$HOME/.config/tagger/")
-	viper.AddConfigPath(".")
+	if configFile != "" {
+		// config file set by flag, use that
+		viper.SetConfigFile(configFile)
+	} else {
+		viper.SetConfigName("tagger")
+		viper.AddConfigPath(filepath.Join("etc", "tagger"))
+		viper.AddConfigPath(filepath.Join("$HOME", ".config", "tagger"))
+		viper.AddConfigPath(".")
+	}
 
 	if err := viper.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
