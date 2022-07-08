@@ -54,11 +54,10 @@ func checkLinodeTagsAgainstConfig(linodes []linodego.Instance) (instanceTagMap, 
 			var newTags []string
 
 			// check `absent` tags to remove unwanted tags
-			for _, tag := range tagSet["absent"] {
-				if slices.Contains(linode.Tags, tag) {
-					// if a linode's existing tags doesn't contain
-					// the specified tag to remove, then we can just
-					// write it into the new tag set
+			for _, tag := range linode.Tags {
+				if !slices.Contains(tagSet["absent"], tag) {
+					// if this tag is not on the `absent` list,
+					// we can persist it through to the new tag set
 					newTags = append(newTags, tag)
 				}
 			}
