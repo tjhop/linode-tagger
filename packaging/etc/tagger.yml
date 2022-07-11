@@ -1,6 +1,8 @@
-instance_regex: '.+'
-tags:
-  present:
-    - tagger_managed
-  absent:
-    - foo
+tagger:
+  instances:
+  - regex: '.+'
+    tags:
+      present:
+        - tagger_managed_1
+      absent:
+        - tagger_absent_1

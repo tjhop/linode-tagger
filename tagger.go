@@ -22,6 +22,18 @@ import (
 
 type instanceTagMap map[int][]string
 
+type TagSet struct {
+	Present []string `yaml:"present" mapstructure:"present"`
+	Absent  []string `yaml:"absent" mapstructure:"absent"`
+}
+type TagRule struct {
+	Regex string `yaml:"regex"`
+	Tags  TagSet `yaml:"tags,omitempty" mapstructure:"tags"`
+}
+type TaggerConfig struct {
+	Instances []TagRule `yaml:"instances"`
+}
+
 func newLinodeClient() linodego.Client {
 	apiKey, ok := os.LookupEnv("LINODE_TOKEN")
 	if !ok {
@@ -43,43 +55,56 @@ func newLinodeClient() linodego.Client {
 	return client
 }
 
-func checkLinodeTagsAgainstConfig(linodes []linodego.Instance) (instanceTagMap, error) {
-	validInstance := regexp.MustCompile(viper.GetString("instance_regex"))
-	tagSet := viper.GetStringMapStringSlice("tags")
-
-	// map of instance ID -> slice of tags for that instance
+func checkLinodeTagsAgainstConfig(linodes []linodego.Instance, rules []TagRule) (instanceTagMap, error) {
 	linodeIDTagMap := make(instanceTagMap)
 
 	for _, linode := range linodes {
-		if validInstance.MatchString(linode.Label) {
-			var newTags []string
+		var combinedNewTags []string
+		for _, rule := range rules {
+			validInstance := regexp.MustCompile(rule.Regex)
 
-			// check `absent` tags to remove unwanted tags
-			for _, tag := range linode.Tags {
-				if !slices.Contains(tagSet["absent"], tag) {
-					// if this tag is not on the `absent` list,
-					// we can persist it through to the new tag set
-					newTags = append(newTags, tag)
+			if validInstance.MatchString(linode.Label) {
+				var newTags []string
+
+				// check `absent` tags to remove unwanted tags
+				for _, tag := range linode.Tags {
+					if !slices.Contains(rule.Tags.Absent, tag) {
+						// if this tag is not on the `absent` list,
+						// we can persist it through to the new tag set
+						newTags = append(newTags, tag)
+					}
+				}
+
+				// check `present` tags to ensure specific tags exist
+				for _, tag := range rule.Tags.Present {
+					// compare filter against `newTags`, as
+					// newTags == (the linode's tags - absent tags)
+					if !slices.Contains(newTags, tag) {
+						// if the specified tag does not exist,
+						// add it into the new tag set
+						newTags = append(newTags, tag)
+					}
+				}
+
+				// add newTags to combined list of new tags for this instance,
+				// excluding duplicates
+				for _, tag := range newTags {
+					if !slices.Contains(combinedNewTags, tag) {
+						combinedNewTags = append(combinedNewTags, tag)
+					}
 				}
 			}
+		}
 
-			// check `present` tags to ensure specific tags exist
-			for _, tag := range tagSet["present"] {
-				// compare filter against `newTags`, as
-				// newTags == (the linode's tags - absent tags)
-				if !slices.Contains(newTags, tag) {
-					// if the specified tag does not exist,
-					// add it into the new tag set
-					newTags = append(newTags, tag)
-				}
+		if len(combinedNewTags) > 0 {
+			linodeIDTagMap[linode.ID] = combinedNewTags
+			if !slices.Equal(linode.Tags, combinedNewTags) {
+				log.WithFields(log.Fields{
+					"linode_id": linode.ID,
+					"old_tags":  linode.Tags,
+					"new_tags":  combinedNewTags,
+				}).Debug("Linode tag set updated")
 			}
-
-			linodeIDTagMap[linode.ID] = newTags
-			log.WithFields(log.Fields{
-				"linode_id": linode.ID,
-				"old_tags":  linode.Tags,
-				"new_tags":  newTags,
-			}).Debug("Linode tag set updated")
 		}
 	}
 
@@ -99,7 +124,7 @@ func updateLinodeInstanceTags(ctx context.Context, client linodego.Client, id in
 	return nil
 }
 
-func updateAllTags(ctx context.Context, client linodego.Client, tagMap instanceTagMap) error {
+func updateAllInstanceTags(ctx context.Context, client linodego.Client, tagMap instanceTagMap) error {
 	for id, tags := range tagMap {
 		if err := updateLinodeInstanceTags(ctx, client, id, &tags); err != nil {
 			return err
@@ -173,6 +198,13 @@ func main() {
 		}
 	}
 
+	var config TaggerConfig
+	if err := viper.UnmarshalKey("tagger", &config); err != nil {
+		log.WithFields(log.Fields{
+			"err": err,
+		}).Fatal("Unable to marshal config file to struct")
+	}
+
 	// set log level based on config
 	level, err := log.ParseLevel(viper.GetString("logging.level"))
 	if err != nil {
@@ -192,7 +224,7 @@ func main() {
 	}
 
 	log.Info("Checking linode instance tags against config file")
-	tagMap, err := checkLinodeTagsAgainstConfig(linodes)
+	tagMap, err := checkLinodeTagsAgainstConfig(linodes, config.Instances)
 	if err != nil {
 		log.WithFields(log.Fields{
 			"err": err,
@@ -200,7 +232,7 @@ func main() {
 	}
 
 	log.Info("Applying new tags to instances that need updating")
-	if err := updateAllTags(ctx, client, tagMap); err != nil {
+	if err := updateAllInstanceTags(ctx, client, tagMap); err != nil {
 		log.WithFields(log.Fields{
 			"err": err,
 		}).Error("Failed to apply new tag sets to instances")
