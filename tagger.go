@@ -8,9 +8,12 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"runtime"
+	"strings"
 
+	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/linode/linodego"
 	log "github.com/sirupsen/logrus"
 	"github.com/sirupsen/logrus/hooks/writer"
@@ -21,6 +24,13 @@ import (
 )
 
 type instanceTagMap map[int][]string
+type ReportMap map[string]ReportData
+
+type ReportData struct {
+	AddCount    int
+	RemoveCount int
+	Instances   string
+}
 
 type TagSet struct {
 	Present []string `yaml:"present" mapstructure:"present"`
@@ -134,6 +144,117 @@ func updateAllInstanceTags(ctx context.Context, client linodego.Client, tagMap i
 	return nil
 }
 
+// sliceDifference returns the elements in `a` that aren't in `b`.
+// shamelessly copied from https://stackoverflow.com/questions/19374219/how-to-find-the-difference-between-two-slices-of-strings
+func sliceDifference(a, b []string) []string {
+	mb := make(map[string]struct{}, len(b))
+	for _, x := range b {
+		mb[x] = struct{}{}
+	}
+	var diff []string
+	for _, x := range a {
+		if _, found := mb[x]; !found {
+			diff = append(diff, x)
+		}
+	}
+	return diff
+}
+
+// need to dereference struct pointers
+func (d *ReportData) updateDataAddCount(data int) {
+	d.AddCount = data
+}
+
+func (d *ReportData) updateDataRemoveCount(data int) {
+	d.RemoveCount = data
+}
+
+func (d *ReportData) updateDataInstances(data string) {
+	d.Instances = data
+}
+
+// strings.Builder is a more efficient way to concatenate our Linode instances
+func strBuild(strs ...string) string {
+	var sb strings.Builder
+	for _, str := range strs {
+		sb.WriteString(str)
+	}
+	return sb.String()
+}
+
+func buildReport(desiredTagMap instanceTagMap, linodes []linodego.Instance) (ReportMap, error) {
+	// diff of returned instanceTagMap vs the instance tags
+	report := make(ReportMap)
+	// separate data stores based on whether we're adding or removing tags
+	var removeData, addData ReportData
+	mutableRemoveData := &removeData
+	mutableAddData := &addData
+
+	for id, tags := range desiredTagMap {
+		var addDiff, removeDiff []string
+
+		for _, linode := range linodes {
+			if linode.ID == id {
+				// our tags are different than we want - something will change. we need to populate the report
+				if !reflect.DeepEqual(tags, linode.Tags) {
+					// order of tags and linode.Tags differs based on whether we're subtracting or contributing more tags
+					addDiff = sliceDifference(tags, linode.Tags)
+					removeDiff = sliceDifference(linode.Tags, tags)
+					if len(removeDiff) > 0 {
+						mutableRemoveData.RemoveCount += 1
+						mutableRemoveData.updateDataRemoveCount(removeData.RemoveCount)
+						str := strBuild(linode.Label, ", ", mutableRemoveData.Instances)
+						mutableRemoveData.updateDataInstances(str)
+					}
+					if len(addDiff) > 0 {
+						mutableAddData.AddCount += 1
+						mutableAddData.updateDataAddCount(addData.AddCount)
+						str := strBuild(linode.Label, ", ", mutableAddData.Instances)
+						mutableAddData.updateDataInstances(str)
+					}
+
+				}
+			}
+		}
+		report[strings.Join(addDiff, ",")] = addData
+		report[strings.Join(removeDiff, ",")] = removeData
+	}
+	return report, nil
+}
+
+func genReport(report ReportMap) error {
+	// create a pretty table
+	t := table.NewWriter()
+	t.SetOutputMirror(os.Stdout)
+	t.AppendHeader(table.Row{"tag", "Linodes Changed", "Linodes", "Added/Removed"})
+	for tag, data := range report {
+		if data.RemoveCount > 0 {
+			t.AppendRow(table.Row{
+				tag,
+				data.RemoveCount,
+				strings.TrimSuffix(data.Instances, ", "),
+				"Removed",
+			})
+		}
+		if data.AddCount > 0 {
+			t.AppendRow(table.Row{
+				tag,
+				data.AddCount,
+				strings.TrimSuffix(data.Instances, ", "),
+				"Added"})
+		}
+	}
+	t.SetAutoIndex(true)
+	t.SetColumnConfigs([]table.ColumnConfig{
+		{
+			WidthMax:          64,
+		},
+	})
+	t.SetStyle(table.StyleLight)
+	t.Render()
+	return nil
+}
+
 func init() {
 	// init logging
 	log.SetOutput(ioutil.Discard) // Send all logs to nowhere by default
@@ -171,6 +292,7 @@ func main() {
 	flag.String("config", "", "Path to configuration file to use")
 	flag.String("logging.level", "", "Logging level may be one of: trace, debug, info, warning, error, fatal and panic")
 	flag.Bool("dry-run", false, "Don't apply the tag changes")
+	flag.Bool("report", false, "Report output to summarize tag changes")
 
 	flag.Parse()
 	viper.BindPFlags(flag.CommandLine)
@@ -242,6 +364,18 @@ func main() {
 		log.Info("Dry run enabled, not applying tags.")
 	}
 
+	log.Info("Comparing desired tags against currently applied tags")
+	report, err := buildReport(tagMap, linodes)
+	if err != nil {
+		log.WithFields(log.Fields{
+			"err": err,
+		}).Error("Failed to desired tags against currently applied tags")
+	}
+
+	if viper.GetBool("report") {
+		// spew report
+		genReport(report)
+	}
+
 	// TODO: add ability to diff old vs new?
-	// TODO: add 'report' type output to make it clear what's changed
 }
