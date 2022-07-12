@@ -1,0 +1,10 @@
+.DS_Store
+.idea
+.envrc
+*.log
+*.vim
+.vagrant/
+tmp/
+
+# goreleaser build folder for outputs
+dist/
