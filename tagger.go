@@ -170,7 +170,7 @@ func main() {
 	// prep and parse flags
 	flag.String("config", "", "Path to configuration file to use")
 	flag.String("logging.level", "", "Logging level may be one of: trace, debug, info, warning, error, fatal and panic")
-	// TODO: add dry run flag/functionality
+	flag.Bool("dry-run", false, "Don't apply the tag changes")
 
 	flag.Parse()
 	viper.BindPFlags(flag.CommandLine)
@@ -231,11 +231,15 @@ func main() {
 		}).Error("Failed to retrieve tag map of instances that need to be updated")
 	}
 
-	log.Info("Applying new tags to instances that need updating")
-	if err := updateAllInstanceTags(ctx, client, tagMap); err != nil {
-		log.WithFields(log.Fields{
-			"err": err,
-		}).Error("Failed to apply new tag sets to instances")
+	if !viper.GetBool("dry-run") {
+		log.Info("Applying new tags to instances that need updating")
+		if err := updateAllInstanceTags(ctx, client, tagMap); err != nil {
+			log.WithFields(log.Fields{
+				"err": err,
+			}).Error("Failed to apply new tag sets to instances")
+		}
+	} else {
+		log.Info("Dry run enabled, not applying tags.")
 	}
 
 	// TODO: add ability to diff old vs new?
