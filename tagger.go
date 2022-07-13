@@ -269,18 +269,13 @@ func init() {
 	// init logging
 	log.SetOutput(ioutil.Discard) // Send all logs to nowhere by default
 
-	log.AddHook(&writer.Hook{ // Send logs with level higher than warning to stderr
+	log.AddHook(&writer.Hook{ // Send logs to stderr, makes it easier to pipe stdout to jq for --json
 		Writer: os.Stderr,
 		LogLevels: []log.Level{
 			log.PanicLevel,
 			log.FatalLevel,
 			log.ErrorLevel,
 			log.WarnLevel,
-		},
-	})
-	log.AddHook(&writer.Hook{ // Send info and debug logs to stdout
-		Writer: os.Stdout,
-		LogLevels: []log.Level{
 			log.InfoLevel,
 			log.DebugLevel,
 		},
