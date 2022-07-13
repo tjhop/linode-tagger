@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -27,9 +28,8 @@ type instanceTagMap map[int][]string
 type ReportMap map[string]ReportData
 
 type ReportData struct {
-	AddCount    int
-	RemoveCount int
-	Instances   string
+	InstancesAdded   []string
+	InstancesRemoved []string
 }
 
 type TagSet struct {
@@ -161,25 +161,12 @@ func sliceDifference(a, b []string) []string {
 }
 
 // need to dereference struct pointers
-func (d *ReportData) updateDataAddCount(data int) {
-	d.AddCount = data
+func (d *ReportData) updateDataInstancesAdded(data []string) {
+	d.InstancesAdded = data
 }
 
-func (d *ReportData) updateDataRemoveCount(data int) {
-	d.RemoveCount = data
-}
-
-func (d *ReportData) updateDataInstances(data string) {
-	d.Instances = data
-}
-
-// strings.Builder is a more efficient way to concatenate our Linode instances
-func strBuild(strs ...string) string {
-	var sb strings.Builder
-	for _, str := range strs {
-		sb.WriteString(str)
-	}
-	return sb.String()
+func (d *ReportData) updateDataInstancesRemoved(data []string) {
+	d.InstancesRemoved = data
 }
 
 func buildReport(desiredTagMap instanceTagMap, linodes []linodego.Instance) (ReportMap, error) {
@@ -201,23 +188,22 @@ func buildReport(desiredTagMap instanceTagMap, linodes []linodego.Instance) (Rep
 					addDiff = sliceDifference(tags, linode.Tags)
 					removeDiff = sliceDifference(linode.Tags, tags)
 					if len(removeDiff) > 0 {
-						mutableRemoveData.RemoveCount += 1
-						mutableRemoveData.updateDataRemoveCount(removeData.RemoveCount)
-						str := strBuild(linode.Label, ", ", mutableRemoveData.Instances)
-						mutableRemoveData.updateDataInstances(str)
+						mutableRemoveData.InstancesRemoved = append(mutableRemoveData.InstancesRemoved, linode.Label)
+						mutableRemoveData.updateDataInstancesRemoved(mutableRemoveData.InstancesRemoved)
 					}
 					if len(addDiff) > 0 {
-						mutableAddData.AddCount += 1
-						mutableAddData.updateDataAddCount(addData.AddCount)
-						str := strBuild(linode.Label, ", ", mutableAddData.Instances)
-						mutableAddData.updateDataInstances(str)
+						mutableAddData.InstancesAdded = append(mutableAddData.InstancesAdded, linode.Label)
+						mutableAddData.updateDataInstancesAdded(mutableAddData.InstancesAdded)
 					}
-
 				}
 			}
 		}
-		report[strings.Join(addDiff, ",")] = addData
-		report[strings.Join(removeDiff, ",")] = removeData
+		for _, tag := range addDiff {
+			report[tag] = addData
+		}
+		for _, tag := range removeDiff {
+			report[tag] = removeData
+		}
 	}
 	return report, nil
 }
@@ -228,31 +214,55 @@ func genReport(report ReportMap) error {
 	t.SetOutputMirror(os.Stdout)
 	t.AppendHeader(table.Row{"tag", "Linodes Changed", "Linodes", "Added/Removed"})
 	for tag, data := range report {
-		if data.RemoveCount > 0 {
+
+		addInstanceList := strings.Join(data.InstancesAdded, ", ")
+		removeInstanceList := strings.Join(data.InstancesRemoved, ", ")
+
+		fmt.Println("add list", addInstanceList)
+		fmt.Println("rm list", removeInstanceList)
+
+		removeCount := len(data.InstancesRemoved)
+		addCount := len(data.InstancesAdded)
+		if removeCount >= 1 {
 			t.AppendRow(table.Row{
 				tag,
-				data.RemoveCount,
-				strings.TrimSuffix(data.Instances, ", "),
+				removeCount,
+				removeInstanceList,
 				"Removed",
 			})
 		}
-		if data.AddCount > 0 {
+		if addCount >= 1 {
 			t.AppendRow(table.Row{
 				tag,
-				data.AddCount,
-				strings.TrimSuffix(data.Instances, ", "),
+				addCount,
+				addInstanceList,
 				"Added"})
 		}
 	}
 	t.SetAutoIndex(true)
 	t.SetColumnConfigs([]table.ColumnConfig{
 		{
-			WidthMax:          64,
+			WidthMax: 64,
 		},
 	})
 	t.SetStyle(table.StyleLight)
 	t.Render()
 	return nil
+}
+
+func genJSON(report ReportMap) error {
+	// convert ReportMap to JSON and send to stdout
+	for tag, data := range report {
+		report[tag] = data
+	}
+	stdout, err := json.Marshal(report)
+	fmt.Println(string(stdout))
+
+	if err == nil {
+		return nil
+	} else {
+		return err
+	}
 }
 
 func init() {
@@ -293,6 +303,7 @@ func main() {
 	flag.String("logging.level", "", "Logging level may be one of: trace, debug, info, warning, error, fatal and panic")
 	flag.Bool("dry-run", false, "Don't apply the tag changes")
 	flag.Bool("report", false, "Report output to summarize tag changes")
+	flag.Bool("json", false, "Provide changes in JSON")
 
 	flag.Parse()
 	viper.BindPFlags(flag.CommandLine)
@@ -373,8 +384,11 @@ func main() {
 	}
 
 	if viper.GetBool("report") {
-		// spew report
 		genReport(report)
+	}
+
+	if viper.GetBool("json") {
+		genJSON(report)
 	}
 
 	// TODO: add ability to diff old vs new?
