@@ -160,24 +160,13 @@ func sliceDifference(a, b []string) []string {
 	return diff
 }
 
-// need to dereference struct pointers
-func (d *ReportData) updateDataInstancesAdded(data []string) {
-	d.InstancesAdded = data
-}
-
-func (d *ReportData) updateDataInstancesRemoved(data []string) {
-	d.InstancesRemoved = data
-}
-
 func buildReport(desiredTagMap instanceTagMap, linodes []linodego.Instance) (ReportMap, error) {
 	// diff of returned instanceTagMap vs the instance tags
 	report := make(ReportMap)
-	// separate data stores based on whether we're adding or removing tags
-	var removeData, addData ReportData
-	mutableRemoveData := &removeData
-	mutableAddData := &addData
 
 	for id, tags := range desiredTagMap {
+		// separate data stores based on whether we're adding or removing tags
+		var removeData, addData ReportData
 		var addDiff, removeDiff []string
 
 		for _, linode := range linodes {
@@ -188,12 +177,10 @@ func buildReport(desiredTagMap instanceTagMap, linodes []linodego.Instance) (Rep
 					addDiff = sliceDifference(tags, linode.Tags)
 					removeDiff = sliceDifference(linode.Tags, tags)
 					if len(removeDiff) > 0 {
-						mutableRemoveData.InstancesRemoved = append(mutableRemoveData.InstancesRemoved, linode.Label)
-						mutableRemoveData.updateDataInstancesRemoved(mutableRemoveData.InstancesRemoved)
+						removeData.InstancesRemoved = append(removeData.InstancesRemoved, linode.Label)
 					}
 					if len(addDiff) > 0 {
-						mutableAddData.InstancesAdded = append(mutableAddData.InstancesAdded, linode.Label)
-						mutableAddData.updateDataInstancesAdded(mutableAddData.InstancesAdded)
+						addData.InstancesAdded = append(addData.InstancesAdded, linode.Label)
 					}
 				}
 			}
