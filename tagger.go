@@ -12,6 +12,7 @@ import (
 	"reflect"
 	"regexp"
 	"runtime"
+	"sort"
 	"strings"
 
 	"github.com/jedib0t/go-pretty/v6/table"
@@ -69,6 +70,8 @@ func checkLinodeTagsAgainstConfig(linodes []linodego.Instance, rules []TagRule) 
 	linodeIDTagMap := make(instanceTagMap)
 
 	for _, linode := range linodes {
+		tags := linode.Tags
+		sort.Strings(tags)
 		var combinedNewTags []string
 		for _, rule := range rules {
 			validInstance := regexp.MustCompile(rule.Regex)
@@ -77,7 +80,7 @@ func checkLinodeTagsAgainstConfig(linodes []linodego.Instance, rules []TagRule) 
 				var newTags []string
 
 				// check `absent` tags to remove unwanted tags
-				for _, tag := range linode.Tags {
+				for _, tag := range tags {
 					if !slices.Contains(rule.Tags.Absent, tag) {
 						// if this tag is not on the `absent` list,
 						// we can persist it through to the new tag set
@@ -108,10 +111,11 @@ func checkLinodeTagsAgainstConfig(linodes []linodego.Instance, rules []TagRule) 
 
 		if len(combinedNewTags) > 0 {
 			linodeIDTagMap[linode.ID] = combinedNewTags
-			if !slices.Equal(linode.Tags, combinedNewTags) {
+			sort.Strings(combinedNewTags)
+			if !slices.Equal(tags, combinedNewTags) {
 				log.WithFields(log.Fields{
 					"linode_id": linode.ID,
-					"old_tags":  linode.Tags,
+					"old_tags":  tags,
 					"new_tags":  combinedNewTags,
 				}).Debug("Linode tag set updated")
 			}
@@ -127,7 +131,10 @@ func updateLinodeInstanceTags(ctx context.Context, client linodego.Client, id in
 		return err
 	}
 
-	if !slices.Equal(updatedInstance.Tags, *tags) {
+	sort.Strings(*tags)
+	updatedTags := updatedInstance.Tags
+	sort.Strings(updatedTags)
+	if !slices.Equal(updatedTags, *tags) {
 		return errors.New("Call to update instance did not result in the expected tag set")
 	}
 
@@ -172,10 +179,13 @@ func buildReport(desiredTagMap instanceTagMap, linodes []linodego.Instance) (Rep
 		for _, linode := range linodes {
 			if linode.ID == id {
 				// our tags are different than we want - something will change. we need to populate the report
-				if !reflect.DeepEqual(tags, linode.Tags) {
+				sort.Strings(tags)
+				t := linode.Tags
+				sort.Strings(t)
+				if !reflect.DeepEqual(tags, t) {
 					// order of tags and linode.Tags differs based on whether we're subtracting or contributing more tags
-					addDiff = sliceDifference(tags, linode.Tags)
-					removeDiff = sliceDifference(linode.Tags, tags)
+					addDiff = sliceDifference(tags, t)
+					removeDiff = sliceDifference(t, tags)
 					if len(removeDiff) > 0 {
 						removeData.InstancesRemoved = append(removeData.InstancesRemoved, linode.Label)
 					}
