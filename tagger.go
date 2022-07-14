@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"reflect"
 	"regexp"
 	"runtime"
 	"sort"
@@ -182,7 +181,7 @@ func buildReport(desiredTagMap instanceTagMap, linodes []linodego.Instance) (Rep
 				sort.Strings(tags)
 				t := linode.Tags
 				sort.Strings(t)
-				if !reflect.DeepEqual(tags, t) {
+				if !slices.Equal(tags, t) {
 					// order of tags and linode.Tags differs based on whether we're subtracting or contributing more tags
 					addDiff = sliceDifference(tags, t)
 					removeDiff = sliceDifference(t, tags)
