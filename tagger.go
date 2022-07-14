@@ -367,10 +367,11 @@ func main() {
 		log.Info("Dry run enabled, not applying tags.")
 	}
 
-	log.Info("Comparing desired tags against currently applied tags")
+	// build report data for use with report/json if requested
 	report := buildReport(tagMap, linodes)
 
 	if viper.GetBool("report") {
+		log.Info("Generating summary report of changes.")
 		genReport(report)
 	}
 
