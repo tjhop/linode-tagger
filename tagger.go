@@ -9,9 +9,9 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"reflect"
 	"regexp"
 	"runtime"
+	"sort"
 	"strings"
 
 	"github.com/jedib0t/go-pretty/v6/table"
@@ -69,6 +69,8 @@ func checkLinodeTagsAgainstConfig(linodes []linodego.Instance, rules []TagRule) 
 	linodeIDTagMap := make(instanceTagMap)
 
 	for _, linode := range linodes {
+		tags := linode.Tags
+		sort.Strings(tags)
 		var combinedNewTags []string
 		for _, rule := range rules {
 			validInstance := regexp.MustCompile(rule.Regex)
@@ -77,7 +79,7 @@ func checkLinodeTagsAgainstConfig(linodes []linodego.Instance, rules []TagRule) 
 				var newTags []string
 
 				// check `absent` tags to remove unwanted tags
-				for _, tag := range linode.Tags {
+				for _, tag := range tags {
 					if !slices.Contains(rule.Tags.Absent, tag) {
 						// if this tag is not on the `absent` list,
 						// we can persist it through to the new tag set
@@ -108,10 +110,11 @@ func checkLinodeTagsAgainstConfig(linodes []linodego.Instance, rules []TagRule) 
 
 		if len(combinedNewTags) > 0 {
 			linodeIDTagMap[linode.ID] = combinedNewTags
-			if !slices.Equal(linode.Tags, combinedNewTags) {
+			sort.Strings(combinedNewTags)
+			if !slices.Equal(tags, combinedNewTags) {
 				log.WithFields(log.Fields{
 					"linode_id": linode.ID,
-					"old_tags":  linode.Tags,
+					"old_tags":  tags,
 					"new_tags":  combinedNewTags,
 				}).Debug("Linode tag set updated")
 			}
@@ -127,7 +130,10 @@ func updateLinodeInstanceTags(ctx context.Context, client linodego.Client, id in
 		return err
 	}
 
-	if !slices.Equal(updatedInstance.Tags, *tags) {
+	sort.Strings(*tags)
+	updatedTags := updatedInstance.Tags
+	sort.Strings(updatedTags)
+	if !slices.Equal(updatedTags, *tags) {
 		return errors.New("Call to update instance did not result in the expected tag set")
 	}
 
@@ -160,40 +166,30 @@ func sliceDifference(a, b []string) []string {
 	return diff
 }
 
-// need to dereference struct pointers
-func (d *ReportData) updateDataInstancesAdded(data []string) {
-	d.InstancesAdded = data
-}
-
-func (d *ReportData) updateDataInstancesRemoved(data []string) {
-	d.InstancesRemoved = data
-}
-
-func buildReport(desiredTagMap instanceTagMap, linodes []linodego.Instance) (ReportMap, error) {
+func buildReport(desiredTagMap instanceTagMap, linodes []linodego.Instance) (ReportMap) {
 	// diff of returned instanceTagMap vs the instance tags
 	report := make(ReportMap)
-	// separate data stores based on whether we're adding or removing tags
-	var removeData, addData ReportData
-	mutableRemoveData := &removeData
-	mutableAddData := &addData
 
 	for id, tags := range desiredTagMap {
+		// separate data stores based on whether we're adding or removing tags
+		var removeData, addData ReportData
 		var addDiff, removeDiff []string
 
 		for _, linode := range linodes {
 			if linode.ID == id {
 				// our tags are different than we want - something will change. we need to populate the report
-				if !reflect.DeepEqual(tags, linode.Tags) {
+				sort.Strings(tags)
+				t := linode.Tags
+				sort.Strings(t)
+				if !slices.Equal(tags, t) {
 					// order of tags and linode.Tags differs based on whether we're subtracting or contributing more tags
-					addDiff = sliceDifference(tags, linode.Tags)
-					removeDiff = sliceDifference(linode.Tags, tags)
+					addDiff = sliceDifference(tags, t)
+					removeDiff = sliceDifference(t, tags)
 					if len(removeDiff) > 0 {
-						mutableRemoveData.InstancesRemoved = append(mutableRemoveData.InstancesRemoved, linode.Label)
-						mutableRemoveData.updateDataInstancesRemoved(mutableRemoveData.InstancesRemoved)
+						removeData.InstancesRemoved = append(removeData.InstancesRemoved, linode.Label)
 					}
 					if len(addDiff) > 0 {
-						mutableAddData.InstancesAdded = append(mutableAddData.InstancesAdded, linode.Label)
-						mutableAddData.updateDataInstancesAdded(mutableAddData.InstancesAdded)
+						addData.InstancesAdded = append(addData.InstancesAdded, linode.Label)
 					}
 				}
 			}
@@ -205,7 +201,8 @@ func buildReport(desiredTagMap instanceTagMap, linodes []linodego.Instance) (Rep
 			report[tag] = removeData
 		}
 	}
-	return report, nil
+
+	return report
 }
 
 func genReport(report ReportMap) error {
@@ -370,15 +367,11 @@ func main() {
 		log.Info("Dry run enabled, not applying tags.")
 	}
 
-	log.Info("Comparing desired tags against currently applied tags")
-	report, err := buildReport(tagMap, linodes)
-	if err != nil {
-		log.WithFields(log.Fields{
-			"err": err,
-		}).Error("Failed to desired tags against currently applied tags")
-	}
+	// build report data for use with report/json if requested
+	report := buildReport(tagMap, linodes)
 
 	if viper.GetBool("report") {
+		log.Info("Generating summary report of changes.")
 		genReport(report)
 	}
 
