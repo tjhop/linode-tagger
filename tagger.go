@@ -166,7 +166,7 @@ func sliceDifference(a, b []string) []string {
 	return diff
 }
 
-func buildReport(desiredTagMap instanceTagMap, linodes []linodego.Instance) (ReportMap, error) {
+func buildReport(desiredTagMap instanceTagMap, linodes []linodego.Instance) (ReportMap) {
 	// diff of returned instanceTagMap vs the instance tags
 	report := make(ReportMap)
 
@@ -201,7 +201,8 @@ func buildReport(desiredTagMap instanceTagMap, linodes []linodego.Instance) (Rep
 			report[tag] = removeData
 		}
 	}
-	return report, nil
+
+	return report
 }
 
 func genReport(report ReportMap) error {
@@ -367,12 +368,7 @@ func main() {
 	}
 
 	log.Info("Comparing desired tags against currently applied tags")
-	report, err := buildReport(tagMap, linodes)
-	if err != nil {
-		log.WithFields(log.Fields{
-			"err": err,
-		}).Error("Failed to desired tags against currently applied tags")
-	}
+	report := buildReport(tagMap, linodes)
 
 	if viper.GetBool("report") {
 		genReport(report)
