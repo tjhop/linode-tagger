@@ -6,3 +6,10 @@ tagger:
         - tagger_managed_1
       absent:
         - tagger_absent_1
+  volumes:
+  - regex: '.+'
+    tags:
+      present:
+        - tagger_absent_1
+      absent:
+        - tagger_managed_1
