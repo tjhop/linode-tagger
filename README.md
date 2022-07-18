@@ -10,6 +10,17 @@ This application may be updated in the future to support enforcing tag sets on o
 LINODE_TOKEN="${your_api_token}" tagger --config /etc/tagger/tagger.yml
 ```
 
+### Docker Usage
+
+Provide a Linode APIv4 token with appropriate scope to tag your desired objects as an environment variable, along with a bind mount volume for the linode-tagger configuration.
+
+```
+docker run \
+-e LINODE_TOKEN="<linode-api-v4-token>" \
+-v /path/to/tagger.yml:/etc/tagger/tagger.yml \
+ghcr.io/tjhop/linode-tagger
+```
+
 ## Building
 
 This project uses [goreleaser](https://goreleaser.com/) to manage builds.
