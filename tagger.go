@@ -294,7 +294,9 @@ func main() {
 	flag.Bool("json", false, "Provide changes in JSON")
 
 	flag.Parse()
-	viper.BindPFlags(flag.CommandLine)
+	if err := viper.BindPFlags(flag.CommandLine); err != nil {
+		log.Fatal("Unable to bind flags")
+	}
 
 	// get config
 	configFile := viper.GetString("config")
