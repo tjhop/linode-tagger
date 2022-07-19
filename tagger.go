@@ -215,9 +215,6 @@ func genReport(report ReportMap) error {
 		addInstanceList := strings.Join(data.InstancesAdded, ", ")
 		removeInstanceList := strings.Join(data.InstancesRemoved, ", ")
 
-		fmt.Println("add list", addInstanceList)
-		fmt.Println("rm list", removeInstanceList)
-
 		removeCount := len(data.InstancesRemoved)
 		addCount := len(data.InstancesAdded)
 		if removeCount >= 1 {
