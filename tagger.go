@@ -134,7 +134,7 @@ func updateLinodeInstanceTags(ctx context.Context, client linodego.Client, id in
 	updatedTags := updatedInstance.Tags
 	sort.Strings(updatedTags)
 	if !slices.Equal(updatedTags, *tags) {
-		return errors.New("Call to update instance did not result in the expected tag set")
+		return errors.New("call to update instance did not result in the expected tag set")
 	}
 
 	return nil
