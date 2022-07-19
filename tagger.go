@@ -166,7 +166,7 @@ func sliceDifference(a, b []string) []string {
 	return diff
 }
 
-func buildReport(desiredTagMap instanceTagMap, linodes []linodego.Instance) (ReportMap) {
+func buildReport(desiredTagMap instanceTagMap, linodes []linodego.Instance) ReportMap {
 	// diff of returned instanceTagMap vs the instance tags
 	report := make(ReportMap)
 
