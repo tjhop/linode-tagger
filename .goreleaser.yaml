@@ -10,9 +10,6 @@ builds:
 dockers:
   # build latest and specific tag version images
   - image_templates:
-      - "tjhop/{{.ProjectName}}:{{ .Tag }}"
-      - "tjhop/{{.ProjectName}}:latest"
-      # push to github container registry too
       - "ghcr.io/tjhop/{{.ProjectName}}:{{ .Tag }}"
       - "ghcr.io/tjhop/{{.ProjectName}}:latest"
     goos: linux
