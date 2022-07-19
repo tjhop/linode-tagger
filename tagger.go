@@ -374,7 +374,11 @@ func main() {
 	}
 
 	if viper.GetBool("json") {
-		genJSON(report)
+		if err := genJSON(report); err != nil {
+			log.WithFields(log.Fields{
+				"err": err,
+			}).Error("Failed to generate JSON report output")
+		}
 	}
 
 	// TODO: add ability to diff old vs new?
