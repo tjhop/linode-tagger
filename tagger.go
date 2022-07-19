@@ -205,7 +205,7 @@ func buildReport(desiredTagMap instanceTagMap, linodes []linodego.Instance) Repo
 	return report
 }
 
-func genReport(report ReportMap) error {
+func genReport(report ReportMap) {
 	// create a pretty table
 	t := table.NewWriter()
 	t.SetOutputMirror(os.Stdout)
@@ -241,7 +241,6 @@ func genReport(report ReportMap) error {
 	})
 	t.SetStyle(table.StyleLight)
 	t.Render()
-	return nil
 }
 
 func genJSON(report ReportMap) error {
