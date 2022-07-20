@@ -1,8 +1,12 @@
 # Linode Tagger
 
-Tagger is an application that can enforce the presence/absence of API tags in bulk across all of your Linode instances.
-_Note_: currently, `tagger` only supports Linode instances.
-This application may be updated in the future to support enforcing tag sets on other Linode APIv4 resource objects.
+Tagger is an application that can enforce the presence/absence of API tags in bulk across all taggable Linode APIv4 resource objects:
+
+* Instances
+* Volumes
+* NodeBalancers
+* Domains
+* LKEClusters
 
 ## Usage
 
