@@ -609,45 +609,28 @@ func main() {
 	client := newLinodeClient()
 	ctx := context.Background()
 
-	var linodes []linodego.Instance
-	var volumes []linodego.Volume
-	var nodebalancers []linodego.NodeBalancer
-	var domains []linodego.Domain
-	var lkeclusters []linodego.LKECluster
-
-	linodeObjects := []interface{}{
-		linodes,
-		volumes,
-		nodebalancers,
-		domains,
-		lkeclusters}
-
-	counter := 0
-	for _, objects := range linodeObjects {
-		var err error
-		switch objects.(type) {
-		case []linodego.Instance:
-			linodes, err = client.ListInstances(ctx, nil)
-			linodeObjects[counter] = linodes
-		case []linodego.Volume:
-			volumes, err = client.ListVolumes(ctx, nil)
-			linodeObjects[counter] = volumes
-		case []linodego.NodeBalancer:
-			nodebalancers, err = client.ListNodeBalancers(ctx, nil)
-			linodeObjects[counter] = nodebalancers
-		case []linodego.Domain:
-			domains, err = client.ListDomains(ctx, nil)
-			linodeObjects[counter] = domains
-		case []linodego.LKECluster:
-			lkeclusters, err = client.ListLKEClusters(ctx, nil)
-			linodeObjects[counter] = lkeclusters
-		}
-
-		if err != nil {
-			log.WithFields(log.Fields{"err": err}).Fatal("Failed to list object")
-		}
-		counter++
+	linodes, err := client.ListInstances(ctx, nil)
+	if err != nil {
+		log.WithFields(log.Fields{"err": err}).Fatal("Failed to list linodes")
 	}
+	volumes, err := client.ListVolumes(ctx, nil)
+	if err != nil {
+		log.WithFields(log.Fields{"err": err}).Fatal("Failed to list volumes")
+	}
+	nodebalancers, err := client.ListNodeBalancers(ctx, nil)
+	if err != nil {
+		log.WithFields(log.Fields{"err": err}).Fatal("Failed to list nodebalancers")
+	}
+	domains, err := client.ListDomains(ctx, nil)
+	if err != nil {
+		log.WithFields(log.Fields{"err": err}).Fatal("Failed to list domains")
+	}
+	lkeclusters, err := client.ListLKEClusters(ctx, nil)
+	if err != nil {
+		log.WithFields(log.Fields{"err": err}).Fatal("Failed to list lkeclusters")
+	}
+
+	linodeObjects := []interface{}{linodes, volumes, nodebalancers, domains, lkeclusters}
 
 	objectTags := make(map[string][]TagRule)
 	objectTags["linodes"] = config.Instances
