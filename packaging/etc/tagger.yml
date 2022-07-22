@@ -27,7 +27,7 @@ tagger:
       present:
         - tagger_managed_1
       absent: []
-  lkeclusters:
+  lke_clusters:
   - regex: '.+'
     tags:
       present:

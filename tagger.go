@@ -45,7 +45,7 @@ type TaggerConfig struct {
 	Volumes       []TagRule `yaml:"volumes"`
 	NodeBalancers []TagRule `yaml:"nodebalancers"`
 	Domains       []TagRule `yaml:"domains"`
-	LKEClusters   []TagRule `yaml:"lkeclusters"`
+	LKEClusters   []TagRule `yaml:"lke_clusters"`
 }
 
 func newLinodeClient() linodego.Client {
