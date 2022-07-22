@@ -246,7 +246,8 @@ func updateObjectTags(ctx context.Context, client linodego.Client, id int, tags 
 			sort.Strings(updatedTags)
 
 			if !slices.Equal(updatedTags, *tags) {
-				return errors.New("call to update instance did not result in the expected tag set")
+				errString := "call to update instance failed: expected " + strings.Join(updatedTags, ", ") + ", got: " + strings.Join(*tags, ", ")
+				return errors.New(errString)
 			}
 		case "volumes":
 			updatedObject, err := client.UpdateVolume(ctx, id, linodego.VolumeUpdateOptions{Tags: tags})
@@ -258,7 +259,8 @@ func updateObjectTags(ctx context.Context, client linodego.Client, id int, tags 
 			sort.Strings(updatedTags)
 
 			if !slices.Equal(updatedTags, *tags) {
-				return errors.New("call to update volume did not result in the expected tag set")
+				errString := "call to update volume failed; expected " + strings.Join(updatedTags, ", ") + ", got: " + strings.Join(*tags, ", ")
+				return errors.New(errString)
 			}
 		case "nodebalancers":
 			updatedObject, err := client.UpdateNodeBalancer(ctx, id, linodego.NodeBalancerUpdateOptions{Tags: tags})
@@ -269,7 +271,8 @@ func updateObjectTags(ctx context.Context, client linodego.Client, id int, tags 
 			updatedTags := updatedObject.Tags
 			sort.Strings(updatedTags)
 			if !slices.Equal(updatedTags, *tags) {
-				return errors.New("call to update nodebalancer did not result in the expected tag set")
+				errString := "call to update nodebalancer failed; expected " + strings.Join(updatedTags, ", ") + ", got: " + strings.Join(*tags, ", ")
+				return errors.New(errString)
 			}
 		case "domains":
 			updatedObject, err := client.UpdateDomain(ctx, id, linodego.DomainUpdateOptions{Tags: *tags})
@@ -280,7 +283,8 @@ func updateObjectTags(ctx context.Context, client linodego.Client, id int, tags 
 			updatedTags := updatedObject.Tags
 			sort.Strings(updatedTags)
 			if !slices.Equal(updatedTags, *tags) {
-				return errors.New("call to update domain did not result in the expected tag set")
+				errString := "call to update domain failed; expected " + strings.Join(updatedTags, ", ") + ", got: " + strings.Join(*tags, ", ")
+				return errors.New(errString)
 			}
 		case "lkeclusters":
 			updatedObject, err := client.UpdateLKECluster(ctx, id, linodego.LKEClusterUpdateOptions{Tags: tags})
@@ -291,7 +295,8 @@ func updateObjectTags(ctx context.Context, client linodego.Client, id int, tags 
 			updatedTags := updatedObject.Tags
 			sort.Strings(updatedTags)
 			if !slices.Equal(updatedTags, *tags) {
-				return errors.New("call to update lkecluster did not result in the expected tag set")
+				errString := "call to update lke_cluster failed; expected " + strings.Join(updatedTags, ", ") + ", got: " + strings.Join(*tags, ", ")
+				return errors.New(errString)
 			}
 
 		}
