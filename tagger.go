@@ -140,15 +140,16 @@ func compareTags(linodeObject interface{}, tagRules []TagRule) ([]string, []stri
 	return combinedNewTags, tags, objectID
 }
 
-func logTags(combinedNewTags []string, tags []string, linodeID int) {
+func logTags(combinedNewTags []string, tags []string, objectID int, objectType string) {
 	if len(combinedNewTags) > 0 {
 		sort.Strings(combinedNewTags)
 		if !slices.Equal(tags, combinedNewTags) {
 			log.WithFields(log.Fields{
-				"linode_id": linodeID,
+				"object_id": objectID,
 				"old_tags":  tags,
 				"new_tags":  combinedNewTags,
-			}).Debug("Linode tag set updated")
+				"type":      objectType,
+			}).Debug("Object tag set updated")
 		}
 	}
 }
@@ -161,7 +162,7 @@ func checkTagsAgainstConfig(
 	for _, objects := range linodeObjects {
 
 		var combinedNewTags, tags []string
-		var linodeID int
+		var objectID int
 
 		switch objects := objects.(type) {
 		case []linodego.Instance:
@@ -172,9 +173,9 @@ func checkTagsAgainstConfig(
 			if objectTags[objectType] != nil {
 				for _, linode := range objects {
 
-					combinedNewTags, tags, linodeID = compareTags(linode, objectTags[objectType])
-					objectTagMap[objectType][linodeID] = combinedNewTags
-					logTags(combinedNewTags, tags, linodeID)
+					combinedNewTags, tags, objectID = compareTags(linode, objectTags[objectType])
+					objectTagMap[objectType][objectID] = combinedNewTags
+					logTags(combinedNewTags, tags, objectID, objectType)
 				}
 			}
 		case []linodego.Volume:
@@ -184,9 +185,9 @@ func checkTagsAgainstConfig(
 
 			if objectTags[objectType] != nil {
 				for _, volume := range objects {
-					combinedNewTags, tags, linodeID = compareTags(volume, objectTags[objectType])
-					objectTagMap[objectType][linodeID] = combinedNewTags
-					logTags(combinedNewTags, tags, linodeID)
+					combinedNewTags, tags, objectID = compareTags(volume, objectTags[objectType])
+					objectTagMap[objectType][objectID] = combinedNewTags
+					logTags(combinedNewTags, tags, objectID, objectType)
 				}
 			}
 		case []linodego.NodeBalancer:
@@ -196,9 +197,9 @@ func checkTagsAgainstConfig(
 
 			if objectTags[objectType] != nil {
 				for _, nodebalancer := range objects {
-					combinedNewTags, tags, linodeID = compareTags(nodebalancer, objectTags[objectType])
-					objectTagMap[objectType][linodeID] = combinedNewTags
-					logTags(combinedNewTags, tags, linodeID)
+					combinedNewTags, tags, objectID = compareTags(nodebalancer, objectTags[objectType])
+					objectTagMap[objectType][objectID] = combinedNewTags
+					logTags(combinedNewTags, tags, objectID, objectType)
 				}
 			}
 		case []linodego.Domain:
@@ -208,9 +209,9 @@ func checkTagsAgainstConfig(
 
 			if objectTags[objectType] != nil {
 				for _, domain := range objects {
-					combinedNewTags, tags, linodeID = compareTags(domain, objectTags[objectType])
-					objectTagMap[objectType][linodeID] = combinedNewTags
-					logTags(combinedNewTags, tags, linodeID)
+					combinedNewTags, tags, objectID = compareTags(domain, objectTags[objectType])
+					objectTagMap[objectType][objectID] = combinedNewTags
+					logTags(combinedNewTags, tags, objectID, objectType)
 				}
 			}
 		case []linodego.LKECluster:
@@ -220,9 +221,9 @@ func checkTagsAgainstConfig(
 
 			if objectTags[objectType] != nil {
 				for _, lkecluster := range objects {
-					combinedNewTags, tags, linodeID = compareTags(lkecluster, objectTags[objectType])
-					objectTagMap[objectType][linodeID] = combinedNewTags
-					logTags(combinedNewTags, tags, linodeID)
+					combinedNewTags, tags, objectID = compareTags(lkecluster, objectTags[objectType])
+					objectTagMap[objectType][objectID] = combinedNewTags
+					logTags(combinedNewTags, tags, objectID, objectType)
 				}
 			}
 		}
@@ -339,7 +340,7 @@ func compareTagData(tags []string, t []string, label string, originalRemoveData 
 	sort.Strings(tags)
 	sort.Strings(t)
 	if !slices.Equal(tags, t) {
-		// order of tags and linode.Tags differs based on whether we're subtracting or contributing more tags
+		// order of tags and object.Tags differs based on whether we're subtracting or contributing more tags
 		addDiff = sliceDifference(tags, t)
 		removeDiff = sliceDifference(t, tags)
 		if len(removeDiff) > 0 {
@@ -604,7 +605,7 @@ func main() {
 		log.Infof("Log level set to: %s", level)
 	}
 
-	log.Info("Gathering linode objects on this account")
+	log.Info("Gathering objects on this account")
 	client := newLinodeClient()
 	ctx := context.Background()
 
@@ -643,7 +644,7 @@ func main() {
 		}
 
 		if err != nil {
-			log.WithFields(log.Fields{"err": err}).Fatal("Failed to list Linode object")
+			log.WithFields(log.Fields{"err": err}).Fatal("Failed to list object")
 		}
 		counter++
 	}
