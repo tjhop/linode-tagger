@@ -616,32 +616,32 @@ func main() {
 		domains,
 		lkeclusters}
 
-	for _, linodeObjects := range linodeObjects {
+	counter := 0
+	for _, objects := range linodeObjects {
 		var err error
-		switch linodeObjects.(type) {
+		switch objects.(type) {
 		case []linodego.Instance:
 			linodes, err = client.ListInstances(ctx, nil)
+			linodeObjects[counter] = linodes
 		case []linodego.Volume:
 			volumes, err = client.ListVolumes(ctx, nil)
+			linodeObjects[counter] = volumes
 		case []linodego.NodeBalancer:
 			nodebalancers, err = client.ListNodeBalancers(ctx, nil)
+			linodeObjects[counter] = nodebalancers
 		case []linodego.Domain:
 			domains, err = client.ListDomains(ctx, nil)
+			linodeObjects[counter] = domains
 		case []linodego.LKECluster:
 			lkeclusters, err = client.ListLKEClusters(ctx, nil)
+			linodeObjects[counter] = lkeclusters
 		}
 
 		if err != nil {
 			log.WithFields(log.Fields{"err": err}).Fatal("Failed to list Linode object")
 		}
+		counter++
 	}
-
-	linodeObjects = []interface{}{
-		linodes,
-		volumes,
-		nodebalancers,
-		domains,
-		lkeclusters}
 
 	objectTags := make(map[string][]TagRule)
 	objectTags["linodes"] = config.Instances
