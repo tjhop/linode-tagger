@@ -24,12 +24,12 @@ import (
 	"golang.org/x/oauth2"
 )
 
-type instanceTagMap map[int][]string
-type ReportMap map[string]ReportData
+type objectTagMap map[string]map[int][]string
+type ReportMap map[string]map[string]ReportData
 
 type ReportData struct {
-	InstancesAdded   []string
-	InstancesRemoved []string
+	ObjectsAdded   []string
+	ObjectsRemoved []string
 }
 
 type TagSet struct {
@@ -41,7 +41,11 @@ type TagRule struct {
 	Tags  TagSet `yaml:"tags,omitempty" mapstructure:"tags"`
 }
 type TaggerConfig struct {
-	Instances []TagRule `yaml:"instances"`
+	Instances     []TagRule `yaml:"instances"`
+	Volumes       []TagRule `yaml:"volumes"`
+	NodeBalancers []TagRule `yaml:"nodebalancers"`
+	Domains       []TagRule `yaml:"domains"`
+	LKEClusters   []TagRule `yaml:"lke_clusters"`
 }
 
 func newLinodeClient() linodego.Client {
@@ -65,85 +69,250 @@ func newLinodeClient() linodego.Client {
 	return client
 }
 
-func checkLinodeTagsAgainstConfig(linodes []linodego.Instance, rules []TagRule) (instanceTagMap, error) {
-	linodeIDTagMap := make(instanceTagMap)
+func compareTags(linodeObject interface{}, tagRules []TagRule) ([]string, []string, int) {
+	// returns a slice of new tags, a slice of old tags, and the object ID (in order)
 
-	for _, linode := range linodes {
-		tags := linode.Tags
-		sort.Strings(tags)
-		var combinedNewTags []string
-		for _, rule := range rules {
-			validInstance := regexp.MustCompile(rule.Regex)
+	var combinedNewTags, tags []string
+	var objectID int
 
-			if validInstance.MatchString(linode.Label) {
-				var newTags []string
+	var label string
+	switch object := linodeObject.(type) {
+	case linodego.Instance:
+		tags = object.Tags
+		label = object.Label
+		objectID = object.ID
+	case linodego.Volume:
+		tags = object.Tags
+		label = object.Label
+		objectID = object.ID
+	case linodego.NodeBalancer:
+		tags = object.Tags
+		label = *object.Label
+		objectID = object.ID
+	case linodego.Domain:
+		tags = object.Tags
+		label = object.Domain
+		objectID = object.ID
+	case linodego.LKECluster:
+		tags = object.Tags
+		label = object.Label
+		objectID = object.ID
+	}
 
-				// check `absent` tags to remove unwanted tags
-				for _, tag := range tags {
-					if !slices.Contains(rule.Tags.Absent, tag) {
-						// if this tag is not on the `absent` list,
-						// we can persist it through to the new tag set
-						newTags = append(newTags, tag)
-					}
-				}
+	sort.Strings(tags)
 
-				// check `present` tags to ensure specific tags exist
-				for _, tag := range rule.Tags.Present {
-					// compare filter against `newTags`, as
-					// newTags == (the linode's tags - absent tags)
-					if !slices.Contains(newTags, tag) {
-						// if the specified tag does not exist,
-						// add it into the new tag set
-						newTags = append(newTags, tag)
-					}
-				}
+	for _, rule := range tagRules {
+		validObject := regexp.MustCompile(rule.Regex)
 
-				// add newTags to combined list of new tags for this instance,
-				// excluding duplicates
-				for _, tag := range newTags {
-					if !slices.Contains(combinedNewTags, tag) {
-						combinedNewTags = append(combinedNewTags, tag)
-					}
+		if validObject.MatchString(label) {
+			var newTags []string
+
+			// check `absent` tags to remove unwanted tags
+			for _, tag := range tags {
+				if !slices.Contains(rule.Tags.Absent, tag) {
+					// if this tag is not on the `absent` list,
+					// we can persist it through to the new tag set
+					newTags = append(newTags, tag)
 				}
 			}
-		}
 
-		if len(combinedNewTags) > 0 {
-			linodeIDTagMap[linode.ID] = combinedNewTags
-			sort.Strings(combinedNewTags)
-			if !slices.Equal(tags, combinedNewTags) {
-				log.WithFields(log.Fields{
-					"linode_id": linode.ID,
-					"old_tags":  tags,
-					"new_tags":  combinedNewTags,
-				}).Debug("Linode tag set updated")
+			// check `present` tags to ensure specific tags exist
+			for _, tag := range rule.Tags.Present {
+				// compare filter against `newTags`, as
+				// newTags == (the objects's tags - absent tags)
+				if !slices.Contains(newTags, tag) {
+					// if the specified tag does not exist,
+					// add it into the new tag set
+					newTags = append(newTags, tag)
+				}
+			}
+
+			// add newTags to combined list of new tags for this object,
+			// excluding duplicates
+			for _, tag := range newTags {
+				if !slices.Contains(combinedNewTags, tag) {
+					combinedNewTags = append(combinedNewTags, tag)
+				}
 			}
 		}
 	}
 
-	return linodeIDTagMap, nil
+	return combinedNewTags, tags, objectID
 }
 
-func updateLinodeInstanceTags(ctx context.Context, client linodego.Client, id int, tags *[]string) error {
-	updatedInstance, err := client.UpdateInstance(ctx, id, linodego.InstanceUpdateOptions{Tags: tags})
-	if err != nil {
-		return err
+func logTags(combinedNewTags []string, tags []string, objectID int, objectType string) {
+	if len(combinedNewTags) > 0 {
+		sort.Strings(combinedNewTags)
+		if !slices.Equal(tags, combinedNewTags) {
+			log.WithFields(log.Fields{
+				"object_id": objectID,
+				"old_tags":  tags,
+				"new_tags":  combinedNewTags,
+				"type":      objectType,
+			}).Debug("Object tag set updated")
+		}
+	}
+}
+
+func checkTagsAgainstConfig(
+	linodeObjects []interface{}, objectTags map[string][]TagRule) (objectTagMap, error) {
+
+	objectTagMap := make(objectTagMap)
+
+	for _, objects := range linodeObjects {
+
+		var combinedNewTags, tags []string
+		var objectID int
+
+		switch objects := objects.(type) {
+		case []linodego.Instance:
+
+			objectType := "linodes"
+			objectTagMap[objectType] = make(map[int][]string)
+
+			if objectTags[objectType] != nil {
+				for _, linode := range objects {
+
+					combinedNewTags, tags, objectID = compareTags(linode, objectTags[objectType])
+					objectTagMap[objectType][objectID] = combinedNewTags
+					logTags(combinedNewTags, tags, objectID, objectType)
+				}
+			}
+		case []linodego.Volume:
+
+			objectType := "volumes"
+			objectTagMap[objectType] = make(map[int][]string)
+
+			if objectTags[objectType] != nil {
+				for _, volume := range objects {
+					combinedNewTags, tags, objectID = compareTags(volume, objectTags[objectType])
+					objectTagMap[objectType][objectID] = combinedNewTags
+					logTags(combinedNewTags, tags, objectID, objectType)
+				}
+			}
+		case []linodego.NodeBalancer:
+
+			objectType := "nodebalancers"
+			objectTagMap[objectType] = make(map[int][]string)
+
+			if objectTags[objectType] != nil {
+				for _, nodebalancer := range objects {
+					combinedNewTags, tags, objectID = compareTags(nodebalancer, objectTags[objectType])
+					objectTagMap[objectType][objectID] = combinedNewTags
+					logTags(combinedNewTags, tags, objectID, objectType)
+				}
+			}
+		case []linodego.Domain:
+
+			objectType := "domains"
+			objectTagMap[objectType] = make(map[int][]string)
+
+			if objectTags[objectType] != nil {
+				for _, domain := range objects {
+					combinedNewTags, tags, objectID = compareTags(domain, objectTags[objectType])
+					objectTagMap[objectType][objectID] = combinedNewTags
+					logTags(combinedNewTags, tags, objectID, objectType)
+				}
+			}
+		case []linodego.LKECluster:
+
+			objectType := "lkeclusters"
+			objectTagMap[objectType] = make(map[int][]string)
+
+			if objectTags[objectType] != nil {
+				for _, lkecluster := range objects {
+					combinedNewTags, tags, objectID = compareTags(lkecluster, objectTags[objectType])
+					objectTagMap[objectType][objectID] = combinedNewTags
+					logTags(combinedNewTags, tags, objectID, objectType)
+				}
+			}
+		}
+
 	}
 
-	sort.Strings(*tags)
-	updatedTags := updatedInstance.Tags
-	sort.Strings(updatedTags)
-	if !slices.Equal(updatedTags, *tags) {
-		return errors.New("call to update instance did not result in the expected tag set")
+	return objectTagMap, nil
+}
+
+func updateObjectTags(ctx context.Context, client linodego.Client, id int, tags *[]string, data string) error {
+
+	if id != 0 {
+		switch data {
+		case "linodes":
+			updatedObject, err := client.UpdateInstance(ctx, id, linodego.InstanceUpdateOptions{Tags: tags})
+			if err != nil {
+				return err
+			}
+			sort.Strings(*tags)
+			updatedTags := updatedObject.Tags
+			sort.Strings(updatedTags)
+
+			if !slices.Equal(updatedTags, *tags) {
+				errString := "call to update instance failed: expected " + strings.Join(updatedTags, ", ") + ", got: " + strings.Join(*tags, ", ")
+				return errors.New(errString)
+			}
+		case "volumes":
+			updatedObject, err := client.UpdateVolume(ctx, id, linodego.VolumeUpdateOptions{Tags: tags})
+			if err != nil {
+				return err
+			}
+			sort.Strings(*tags)
+			updatedTags := updatedObject.Tags
+			sort.Strings(updatedTags)
+
+			if !slices.Equal(updatedTags, *tags) {
+				errString := "call to update volume failed; expected " + strings.Join(updatedTags, ", ") + ", got: " + strings.Join(*tags, ", ")
+				return errors.New(errString)
+			}
+		case "nodebalancers":
+			updatedObject, err := client.UpdateNodeBalancer(ctx, id, linodego.NodeBalancerUpdateOptions{Tags: tags})
+			if err != nil {
+				return err
+			}
+			sort.Strings(*tags)
+			updatedTags := updatedObject.Tags
+			sort.Strings(updatedTags)
+			if !slices.Equal(updatedTags, *tags) {
+				errString := "call to update nodebalancer failed; expected " + strings.Join(updatedTags, ", ") + ", got: " + strings.Join(*tags, ", ")
+				return errors.New(errString)
+			}
+		case "domains":
+			updatedObject, err := client.UpdateDomain(ctx, id, linodego.DomainUpdateOptions{Tags: *tags})
+			if err != nil {
+				return err
+			}
+			sort.Strings(*tags)
+			updatedTags := updatedObject.Tags
+			sort.Strings(updatedTags)
+			if !slices.Equal(updatedTags, *tags) {
+				errString := "call to update domain failed; expected " + strings.Join(updatedTags, ", ") + ", got: " + strings.Join(*tags, ", ")
+				return errors.New(errString)
+			}
+		case "lkeclusters":
+			updatedObject, err := client.UpdateLKECluster(ctx, id, linodego.LKEClusterUpdateOptions{Tags: tags})
+			if err != nil {
+				return err
+			}
+			sort.Strings(*tags)
+			updatedTags := updatedObject.Tags
+			sort.Strings(updatedTags)
+			if !slices.Equal(updatedTags, *tags) {
+				errString := "call to update lke_cluster failed; expected " + strings.Join(updatedTags, ", ") + ", got: " + strings.Join(*tags, ", ")
+				return errors.New(errString)
+			}
+
+		}
 	}
 
 	return nil
 }
 
-func updateAllInstanceTags(ctx context.Context, client linodego.Client, tagMap instanceTagMap) error {
-	for id, tags := range tagMap {
-		if err := updateLinodeInstanceTags(ctx, client, id, &tags); err != nil {
-			return err
+func updateAllObjectTags(ctx context.Context, client linodego.Client, tagMap objectTagMap) error {
+	for data := range tagMap {
+
+		for id, tags := range tagMap[data] {
+			if err := updateObjectTags(ctx, client, id, &tags, data); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -166,42 +335,136 @@ func sliceDifference(a, b []string) []string {
 	return diff
 }
 
-func buildReport(desiredTagMap instanceTagMap, linodes []linodego.Instance) ReportMap {
-	// diff of returned instanceTagMap vs the instance tags
+func compareTagData(tags []string, t []string, label string, originalRemoveData ReportData, originalAddData ReportData) (removeData ReportData, addData ReportData, addDiff []string, removeDiff []string) {
+	// our tags are different than we want - something will change. we need to populate the report
+	sort.Strings(tags)
+	sort.Strings(t)
+	if !slices.Equal(tags, t) {
+		// order of tags and object.Tags differs based on whether we're subtracting or contributing more tags
+		addDiff = sliceDifference(tags, t)
+		removeDiff = sliceDifference(t, tags)
+		if len(removeDiff) > 0 {
+			removeData.ObjectsRemoved = append(originalRemoveData.ObjectsRemoved, label)
+		}
+		if len(addDiff) > 0 {
+			addData.ObjectsAdded = append(originalAddData.ObjectsAdded, label)
+		}
+	}
+	return removeData, addData, addDiff, removeDiff
+}
+
+func buildReport(desiredTagMap objectTagMap, linodeObjects []interface{}) ReportMap {
+	// diff of returned objectTagMap vs the object tags
+
 	report := make(ReportMap)
+	var objectType string
+	// iterate through every type of linode object and see what tags should change
+	for _, objects := range linodeObjects {
+		switch objects := objects.(type) {
+		case []linodego.Instance:
+			objectType = "linodes"
+			report[objectType] = make(map[string]ReportData)
 
-	for id, tags := range desiredTagMap {
-		// separate data stores based on whether we're adding or removing tags
-		var removeData, addData ReportData
-		var addDiff, removeDiff []string
-
-		for _, linode := range linodes {
-			if linode.ID == id {
-				// our tags are different than we want - something will change. we need to populate the report
-				sort.Strings(tags)
-				t := linode.Tags
-				sort.Strings(t)
-				if !slices.Equal(tags, t) {
-					// order of tags and linode.Tags differs based on whether we're subtracting or contributing more tags
-					addDiff = sliceDifference(tags, t)
-					removeDiff = sliceDifference(t, tags)
-					if len(removeDiff) > 0 {
-						removeData.InstancesRemoved = append(removeData.InstancesRemoved, linode.Label)
+			// separate data stores based on whether we're adding or removing tags
+			var addDiff, removeDiff []string
+			var removeData, addData ReportData
+			for id, tags := range desiredTagMap[objectType] {
+				for _, linode := range objects {
+					if linode.ID == id {
+						removeData, addData, addDiff, removeDiff = compareTagData(tags, linode.Tags, linode.Label, removeData, addData)
 					}
-					if len(addDiff) > 0 {
-						addData.InstancesAdded = append(addData.InstancesAdded, linode.Label)
+					for _, tag := range addDiff {
+						report[objectType][tag] = addData
+					}
+					for _, tag := range removeDiff {
+						report[objectType][tag] = removeData
 					}
 				}
 			}
-		}
-		for _, tag := range addDiff {
-			report[tag] = addData
-		}
-		for _, tag := range removeDiff {
-			report[tag] = removeData
+
+		case []linodego.Volume:
+			objectType = "volumes"
+			report[objectType] = make(map[string]ReportData)
+
+			var addDiff, removeDiff []string
+			var removeData, addData ReportData
+			for id, tags := range desiredTagMap[objectType] {
+				for _, volume := range objects {
+					if volume.ID == id {
+						removeData, addData, addDiff, removeDiff = compareTagData(tags, volume.Tags, volume.Label, removeData, addData)
+					}
+					for _, tag := range addDiff {
+						report[objectType][tag] = addData
+					}
+					for _, tag := range removeDiff {
+						report[objectType][tag] = removeData
+					}
+				}
+			}
+
+		case []linodego.NodeBalancer:
+			objectType = "nodebalancers"
+			report[objectType] = make(map[string]ReportData)
+
+			var addDiff, removeDiff []string
+			var removeData, addData ReportData
+			for id, tags := range desiredTagMap[objectType] {
+				for _, nodebalancer := range objects {
+					if nodebalancer.ID == id {
+						removeData, addData, addDiff, removeDiff = compareTagData(tags, nodebalancer.Tags, *nodebalancer.Label, removeData, addData)
+					}
+					for _, tag := range addDiff {
+						report[objectType][tag] = addData
+					}
+					for _, tag := range removeDiff {
+						report[objectType][tag] = removeData
+					}
+				}
+			}
+
+		case []linodego.Domain:
+			objectType = "domains"
+			report[objectType] = make(map[string]ReportData)
+
+			var addDiff, removeDiff []string
+			var removeData, addData ReportData
+			for id, tags := range desiredTagMap[objectType] {
+				for _, domain := range objects {
+					if domain.ID == id {
+						removeData, addData, addDiff, removeDiff = compareTagData(tags, domain.Tags, domain.Domain, removeData, addData)
+					}
+					for _, tag := range addDiff {
+						report[objectType][tag] = addData
+					}
+					for _, tag := range removeDiff {
+						report[objectType][tag] = removeData
+					}
+				}
+
+			}
+		case []linodego.LKECluster:
+			objectType = "lkeclusters"
+			report[objectType] = make(map[string]ReportData)
+
+			var addDiff, removeDiff []string
+			var removeData, addData ReportData
+			for id, tags := range desiredTagMap[objectType] {
+				for _, lkecluster := range objects {
+					if lkecluster.ID == id {
+						removeData, addData, addDiff, removeDiff = compareTagData(tags, lkecluster.Tags, lkecluster.Label, removeData, addData)
+					}
+					for _, tag := range addDiff {
+						report[objectType][tag] = addData
+					}
+					for _, tag := range removeDiff {
+						report[objectType][tag] = removeData
+					}
+				}
+
+			}
+
 		}
 	}
-
 	return report
 }
 
@@ -209,28 +472,32 @@ func genReport(report ReportMap) {
 	// create a pretty table
 	t := table.NewWriter()
 	t.SetOutputMirror(os.Stdout)
-	t.AppendHeader(table.Row{"tag", "Linodes Changed", "Linodes", "Added/Removed"})
-	for tag, data := range report {
+	t.AppendHeader(table.Row{"tag", "Objects Changed", "Objects", "Object Type", "Added/Removed"})
+	for objectType := range report {
+		for tag, data := range report[objectType] {
 
-		addInstanceList := strings.Join(data.InstancesAdded, ", ")
-		removeInstanceList := strings.Join(data.InstancesRemoved, ", ")
+			addObjectList := strings.Join(data.ObjectsAdded, ", ")
+			removeObjectList := strings.Join(data.ObjectsRemoved, ", ")
 
-		removeCount := len(data.InstancesRemoved)
-		addCount := len(data.InstancesAdded)
-		if removeCount >= 1 {
-			t.AppendRow(table.Row{
-				tag,
-				removeCount,
-				removeInstanceList,
-				"Removed",
-			})
-		}
-		if addCount >= 1 {
-			t.AppendRow(table.Row{
-				tag,
-				addCount,
-				addInstanceList,
-				"Added"})
+			removeCount := len(data.ObjectsRemoved)
+			addCount := len(data.ObjectsAdded)
+			if removeCount >= 1 {
+				t.AppendRow(table.Row{
+					tag,
+					removeCount,
+					removeObjectList,
+					objectType,
+					"Removed",
+				})
+			}
+			if addCount >= 1 {
+				t.AppendRow(table.Row{
+					tag,
+					addCount,
+					addObjectList,
+					objectType,
+					"Added"})
+			}
 		}
 	}
 	t.SetAutoIndex(true)
@@ -245,17 +512,18 @@ func genReport(report ReportMap) {
 
 func genJSON(report ReportMap) error {
 	// convert ReportMap to JSON and send to stdout
-	for tag, data := range report {
-		report[tag] = data
+	for objectType := range report {
+		for tag, data := range report[objectType] {
+			report[objectType][tag] = data
+		}
 	}
 	stdout, err := json.Marshal(report)
 	fmt.Println(string(stdout))
 
-	if err == nil {
-		return nil
-	} else {
+	if err != nil {
 		return err
 	}
+	return nil
 }
 
 func init() {
@@ -338,38 +606,66 @@ func main() {
 		log.Infof("Log level set to: %s", level)
 	}
 
-	log.Info("Gathering linode instances on this account")
+	log.Info("Gathering objects on this account")
 	client := newLinodeClient()
 	ctx := context.Background()
+
 	linodes, err := client.ListInstances(ctx, nil)
 	if err != nil {
-		log.WithFields(log.Fields{"err": err}).Fatal("Failed to list Linodes")
+		log.WithFields(log.Fields{"err": err}).Fatal("Failed to list linodes")
+	}
+	volumes, err := client.ListVolumes(ctx, nil)
+	if err != nil {
+		log.WithFields(log.Fields{"err": err}).Fatal("Failed to list volumes")
+	}
+	nodebalancers, err := client.ListNodeBalancers(ctx, nil)
+	if err != nil {
+		log.WithFields(log.Fields{"err": err}).Fatal("Failed to list nodebalancers")
+	}
+	domains, err := client.ListDomains(ctx, nil)
+	if err != nil {
+		log.WithFields(log.Fields{"err": err}).Fatal("Failed to list domains")
+	}
+	lkeclusters, err := client.ListLKEClusters(ctx, nil)
+	if err != nil {
+		log.WithFields(log.Fields{"err": err}).Fatal("Failed to list lkeclusters")
 	}
 
-	log.Info("Checking linode instance tags against config file")
-	tagMap, err := checkLinodeTagsAgainstConfig(linodes, config.Instances)
+	linodeObjects := []interface{}{linodes, volumes, nodebalancers, domains, lkeclusters}
+
+	objectTags := make(map[string][]TagRule)
+	objectTags["linodes"] = config.Instances
+	objectTags["volumes"] = config.Volumes
+	objectTags["nodebalancers"] = config.NodeBalancers
+	objectTags["domains"] = config.Domains
+	objectTags["lkeclusters"] = config.LKEClusters
+
+	log.Info("Checking linode object tags against config file")
+	tagMap, err := checkTagsAgainstConfig(
+		linodeObjects, objectTags)
+
 	if err != nil {
 		log.WithFields(log.Fields{
 			"err": err,
-		}).Error("Failed to retrieve tag map of instances that need to be updated")
+		}).Error("Failed to retrieve tag map of objects that need to be updated")
 	}
 
 	if !viper.GetBool("dry-run") {
-		log.Info("Applying new tags to instances that need updating")
-		if err := updateAllInstanceTags(ctx, client, tagMap); err != nil {
+		log.Info("Applying new tags to objects that need updating")
+		if err := updateAllObjectTags(ctx, client, tagMap); err != nil {
 			log.WithFields(log.Fields{
 				"err": err,
-			}).Error("Failed to apply new tag sets to instances")
+			}).Error("Failed to apply new tag sets to objects")
 		}
 	} else {
 		log.Info("Dry run enabled, not applying tags.")
 	}
 
 	// build report data for use with report/json if requested
-	report := buildReport(tagMap, linodes)
+	report := buildReport(tagMap, linodeObjects)
 
 	if viper.GetBool("report") {
-		log.Info("Generating summary report of changes.")
+		log.Info("Generating summary report of changes")
 		genReport(report)
 	}
 

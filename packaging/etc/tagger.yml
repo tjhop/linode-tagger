@@ -6,3 +6,33 @@ tagger:
         - tagger_managed_1
       absent:
         - tagger_absent_1
+  volumes:
+  - regex: '.+'
+    tags:
+      present:
+        - tagger_managed_1
+      absent:
+        - tagger_absent_1
+  nodebalancers:
+  - regex: 'ccm.+'
+    tags:
+      present:
+        - tagger_managed_1
+        - lke
+      absent:
+        - tagger_absent_1
+  domains:
+  - regex: '.+'
+    tags:
+      present:
+        - tagger_managed_1
+      absent: []
+  lke_clusters:
+  - regex: '.+'
+    tags:
+      present:
+        - tagger_managed_1
+        - lke
+      absent:
+        - tagger_absent_1
+        - tagger_absent_2
