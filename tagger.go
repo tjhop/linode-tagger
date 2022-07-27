@@ -606,6 +606,10 @@ func main() {
 		log.Infof("Log level set to: %s", level)
 	}
 
+	tagger(config)
+}
+
+func tagger(config TaggerConfig) {
 	log.Info("Gathering objects on this account")
 	client := newLinodeClient()
 	ctx := context.Background()
