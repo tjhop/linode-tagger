@@ -2,11 +2,13 @@
 
 Tagger is an application that can enforce the presence/absence of API tags in bulk across all taggable Linode APIv4 resource objects:
 
-* Instances
-* Volumes
-* NodeBalancers
-* Domains
-* LKEClusters
+| Object Type | API Token Scopes Required |
+| --- | --- |
+| Instances | `linodes:read_write` |
+| Volumes | `volumes:read_write` |
+| NodeBalancers | `nodebalancers:read_write` |
+| Domains | `domains:read_write` |
+| LKEClusters | `lke:read_write` |
 
 ## Usage
 
