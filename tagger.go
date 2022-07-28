@@ -48,6 +48,17 @@ type TaggerConfig struct {
 	LKEClusters   []TagRule `yaml:"lke_clusters"`
 }
 
+// LinodeObjectCollection holds a slice of each type of
+// taggable object that is available from the Linode API
+// via the linodego library.
+type LinodeObjectCollection struct {
+	Instances     []linodego.Instance
+	Volumes       []linodego.Volume
+	NodeBalancers []linodego.NodeBalancer
+	Domains       []linodego.Domain
+	LKEClusters   []linodego.LKECluster
+}
+
 func newLinodeClient() linodego.Client {
 	apiKey, ok := os.LookupEnv("LINODE_TOKEN")
 	if !ok {
@@ -614,28 +625,50 @@ func tagger(config TaggerConfig) {
 	client := newLinodeClient()
 	ctx := context.Background()
 
-	linodes, err := client.ListInstances(ctx, nil)
-	if err != nil {
-		log.WithFields(log.Fields{"err": err}).Fatal("Failed to list linodes")
-	}
-	volumes, err := client.ListVolumes(ctx, nil)
-	if err != nil {
-		log.WithFields(log.Fields{"err": err}).Fatal("Failed to list volumes")
-	}
-	nodebalancers, err := client.ListNodeBalancers(ctx, nil)
-	if err != nil {
-		log.WithFields(log.Fields{"err": err}).Fatal("Failed to list nodebalancers")
-	}
-	domains, err := client.ListDomains(ctx, nil)
-	if err != nil {
-		log.WithFields(log.Fields{"err": err}).Fatal("Failed to list domains")
-	}
-	lkeclusters, err := client.ListLKEClusters(ctx, nil)
-	if err != nil {
-		log.WithFields(log.Fields{"err": err}).Fatal("Failed to list lkeclusters")
+	var loc LinodeObjectCollection
+	if len(config.Instances) > 0 {
+		linodes, err := client.ListInstances(ctx, nil)
+		if err != nil {
+			log.WithFields(log.Fields{"err": err}).Fatal("Failed to list linodes")
+		}
+		loc.Instances = linodes
 	}
 
-	linodeObjects := []interface{}{linodes, volumes, nodebalancers, domains, lkeclusters}
+	if len(config.Volumes) > 0 {
+		volumes, err := client.ListVolumes(ctx, nil)
+		if err != nil {
+			log.WithFields(log.Fields{"err": err}).Fatal("Failed to list volumes")
+		}
+		loc.Volumes = volumes
+	}
+
+	if len(config.NodeBalancers) > 0 {
+		nodebalancers, err := client.ListNodeBalancers(ctx, nil)
+		if err != nil {
+			log.WithFields(log.Fields{"err": err}).Fatal("Failed to list nodebalancers")
+		}
+		loc.NodeBalancers = nodebalancers
+	}
+
+	if len(config.Domains) > 0 {
+		domains, err := client.ListDomains(ctx, nil)
+		if err != nil {
+			log.WithFields(log.Fields{"err": err}).Fatal("Failed to list domains")
+		}
+		loc.Domains = domains
+	}
+
+	if len(config.LKEClusters) > 0 {
+		lkeclusters, err := client.ListLKEClusters(ctx, nil)
+		if err != nil {
+			log.WithFields(log.Fields{"err": err}).Fatal("Failed to list lkeclusters")
+		}
+		loc.LKEClusters = lkeclusters
+	}
+
+	// TODO: convert other uses of these []interface configs -> LinodeObjectCollection struct usage? 
+	// should be able to reduce a lot of the type assertions used elsewhere if we just use the explicit types
+	linodeObjects := []interface{}{loc.Instances, loc.Volumes, loc.NodeBalancers, loc.Domains, loc.LKEClusters}
 
 	objectTags := make(map[string][]TagRule)
 	objectTags["linodes"] = config.Instances
