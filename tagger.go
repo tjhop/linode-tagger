@@ -24,6 +24,12 @@ import (
 	"golang.org/x/oauth2"
 )
 
+var (
+	Version   string // will be populated by linker during `go build`
+	BuildDate string // will be populated by linker during `go build`
+	Commit    string // will be populated by linker during `go build`
+)
+
 type objectTagMap map[string]map[int][]string
 type ReportMap map[string]map[string]ReportData
 
@@ -564,6 +570,14 @@ func init() {
 	})
 }
 
+func version() {
+	fmt.Printf("Tagger Build Information\nVersion: %s\nBuild Date: %s\nCommit: %s\n",
+		Version,
+		BuildDate,
+		Commit,
+	)
+}
+
 func main() {
 	// prep and parse flags
 	flag.String("config", "", "Path to configuration file to use")
@@ -571,10 +585,16 @@ func main() {
 	flag.Bool("dry-run", false, "Don't apply the tag changes")
 	flag.Bool("report", false, "Report output to summarize tag changes")
 	flag.Bool("json", false, "Provide changes in JSON")
+	flag.BoolP("version", "v", false, "Print version information about this build of tagger")
 
 	flag.Parse()
 	if err := viper.BindPFlags(flag.CommandLine); err != nil {
 		log.Fatal("Unable to bind flags")
+	}
+
+	if viper.GetBool("version") {
+		version()
+		os.Exit(0)
 	}
 
 	// get config

@@ -6,6 +6,10 @@ builds:
       - linux
       - windows
       - darwin
+    ldflags:
+      - -X main.BuildDate={{ .CommitDate }}
+      - -X main.Version={{ .Version }}
+      - -X main.Commit={{ .Commit }}
     binary: tagger
 dockers:
   # build latest and specific tag version images
