@@ -14,7 +14,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/linode/linodego"
 	log "github.com/sirupsen/logrus"
 	"github.com/sirupsen/logrus/hooks/writer"
@@ -825,48 +824,6 @@ func buildReport(desiredTagMap objectTagMap, linodeObjects []interface{}) Report
 	return report
 }
 
-func genReport(report ReportMap) {
-	// create a pretty table
-	t := table.NewWriter()
-	t.SetOutputMirror(os.Stdout)
-	t.AppendHeader(table.Row{"tag", "Objects Changed", "Objects", "Object Type", "Added/Removed"})
-	for objectType := range report {
-		for tag, data := range report[objectType] {
-
-			addObjectList := strings.Join(data.ObjectsAdded, ", ")
-			removeObjectList := strings.Join(data.ObjectsRemoved, ", ")
-
-			removeCount := len(data.ObjectsRemoved)
-			addCount := len(data.ObjectsAdded)
-			if removeCount >= 1 {
-				t.AppendRow(table.Row{
-					tag,
-					removeCount,
-					removeObjectList,
-					objectType,
-					"Removed",
-				})
-			}
-			if addCount >= 1 {
-				t.AppendRow(table.Row{
-					tag,
-					addCount,
-					addObjectList,
-					objectType,
-					"Added"})
-			}
-		}
-	}
-	t.SetAutoIndex(true)
-	t.SetColumnConfigs([]table.ColumnConfig{
-		{
-			WidthMax: 64,
-		},
-	})
-	t.SetStyle(table.StyleLight)
-	t.Render()
-}
-
 func genJSON(diff LinodeObjectCollectionDiff) error {
 	bytes, err := json.Marshal(diff)
 	if err != nil {
@@ -917,7 +874,6 @@ func main() {
 	flag.String("config", "", "Path to configuration file to use")
 	flag.String("logging.level", "", "Logging level may be one of: trace, debug, info, warning, error, fatal and panic")
 	flag.Bool("dry-run", false, "Don't apply the tag changes")
-	flag.Bool("report", false, "Report output to summarize tag changes")
 	flag.Bool("json", false, "Provide changes in JSON")
 	flag.BoolP("version", "v", false, "Print version information about this build of tagger")
 
@@ -1040,12 +996,6 @@ func tagger(config TaggerConfig) {
 
 	// build report data for use with report/json if requested
 	// report := buildReport(tagMap, linodeObjects)
-
-	if viper.GetBool("report") {
-		log.Info("Generating summary report of changes")
-		// TODO: fix report generation
-		// genReport(report)
-	}
 
 	if viper.GetBool("json") {
 		if err := genJSON(tagDiff); err != nil {
