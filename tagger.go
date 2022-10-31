@@ -114,17 +114,17 @@ func newLinodeClient() linodego.Client {
 // getTagDiff accepts 2 string slices (the current set of tags, and the desired
 // set of tags). It outputs a Diff object containing the changes
 func getTagDiff(have, want []string) Diff {
-	var d Diff
+	var diff Diff
 
 	sort.Strings(have)
 	sort.Strings(want)
 	if !slices.Equal(have, want) {
 		// order of have and object.have differs based on whether we're subtracting or contributing more have
-		d.Added = sliceDifference(want, have)
-		d.Removed = sliceDifference(have, want)
+		diff.Added = sliceDifference(want, have)
+		diff.Removed = sliceDifference(have, want)
 	}
 
-	return d
+	return diff
 }
 
 // getLinodeObjectCollectionDiff accepts a LinodeObjectCollection and
