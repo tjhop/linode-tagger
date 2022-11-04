@@ -214,8 +214,11 @@ func getLinodeObjectCollectionDiff(loc LinodeObjectCollection, desiredTags Linod
 // tags, and a slice of TagRules to apply to the given object type. The regex
 // in the TagRule is matched against the provided label. This function returns
 // a string slice, which is the desired set of tags that the given object
-// should have according to the config.
-func getNewTags(objectLabel string, tags []string, rules []TagRule) []string {
+// should have according to the config, and a boolean indicating whether or not
+// the given object label matched any of the configured tag rules.
+func getNewTags(objectLabel string, tags []string, rules []TagRule) ([]string, bool) {
+	var found bool
+
 	if len(rules) > 0 {
 		sort.Strings(tags)
 		var combinedNewTags []string
@@ -225,6 +228,7 @@ func getNewTags(objectLabel string, tags []string, rules []TagRule) []string {
 			validRegex := regexp.MustCompile(rule.Regex)
 
 			if validRegex.MatchString(objectLabel) {
+				found = true
 				var newTags []string
 
 				// check `absent` tags to remove unwanted tags
@@ -257,10 +261,10 @@ func getNewTags(objectLabel string, tags []string, rules []TagRule) []string {
 			}
 		}
 
-		return combinedNewTags
+		return combinedNewTags, found
 	}
 
-	return tags
+	return tags, found
 }
 
 func compareAllObjectTagsAgainstConfig(loc LinodeObjectCollection, config TaggerConfig) (LinodeObjectDesiredTagsCollection, LinodeObjectCollectionDiff) {
@@ -269,87 +273,112 @@ func compareAllObjectTagsAgainstConfig(loc LinodeObjectCollection, config Tagger
 
 	// instances
 	for _, instance := range loc.Instances {
-		newTags := getNewTags(instance.Label, instance.Tags, config.Instances)
+		currTags := instance.Tags
+		newTags, found := getNewTags(instance.Label, currTags, config.Instances)
 
-		desiredNewTags.Instances = append(desiredNewTags.Instances, LinodeObjectDesiredTags{
-			ID:  instance.ID,
-			Old: instance.Tags,
-			New: newTags,
-		})
+		sort.Strings(currTags)
+		sort.Strings(newTags)
+		if found && !slices.Equal(currTags, newTags) {
+			desiredNewTags.Instances = append(desiredNewTags.Instances, LinodeObjectDesiredTags{
+				ID:  instance.ID,
+				Old: currTags,
+				New: newTags,
+			})
 
-		diff.Instances = append(diff.Instances, LinodeObjectDiff{
-			ID:    instance.ID,
-			Label: instance.Label,
-			Diff:  getTagDiff(instance.Tags, newTags),
-		})
+			diff.Instances = append(diff.Instances, LinodeObjectDiff{
+				ID:    instance.ID,
+				Label: instance.Label,
+				Diff:  getTagDiff(currTags, newTags),
+			})
+		}
 	}
 
 	// domains
 	for _, domain := range loc.Domains {
-		newTags := getNewTags(domain.Domain, domain.Tags, config.Domains)
+		currTags := domain.Tags
+		newTags, found := getNewTags(domain.Domain, currTags, config.Domains)
 
-		desiredNewTags.Domains = append(desiredNewTags.Domains, LinodeObjectDesiredTags{
-			ID:  domain.ID,
-			Old: domain.Tags,
-			New: newTags,
-		})
+		sort.Strings(currTags)
+		sort.Strings(newTags)
+		if found && !slices.Equal(currTags, newTags) {
+			desiredNewTags.Domains = append(desiredNewTags.Domains, LinodeObjectDesiredTags{
+				ID:  domain.ID,
+				Old: currTags,
+				New: newTags,
+			})
 
-		diff.Domains = append(diff.Domains, LinodeObjectDiff{
-			ID:    domain.ID,
-			Label: domain.Domain,
-			Diff:  getTagDiff(domain.Tags, newTags),
-		})
+			diff.Domains = append(diff.Domains, LinodeObjectDiff{
+				ID:    domain.ID,
+				Label: domain.Domain,
+				Diff:  getTagDiff(currTags, newTags),
+			})
+		}
 	}
 
 	// LKE clusters
 	for _, lke := range loc.LKEClusters {
-		newTags := getNewTags(lke.Label, lke.Tags, config.LKEClusters)
+		currTags := lke.Tags
+		newTags, found := getNewTags(lke.Label, currTags, config.LKEClusters)
 
-		desiredNewTags.LKEClusters = append(desiredNewTags.LKEClusters, LinodeObjectDesiredTags{
-			ID:  lke.ID,
-			Old: lke.Tags,
-			New: newTags,
-		})
+		sort.Strings(currTags)
+		sort.Strings(newTags)
+		if found && !slices.Equal(currTags, newTags) {
+			desiredNewTags.LKEClusters = append(desiredNewTags.LKEClusters, LinodeObjectDesiredTags{
+				ID:  lke.ID,
+				Old: currTags,
+				New: newTags,
+			})
 
-		diff.LKEClusters = append(diff.LKEClusters, LinodeObjectDiff{
-			ID:    lke.ID,
-			Label: lke.Label,
-			Diff:  getTagDiff(lke.Tags, newTags),
-		})
+			diff.LKEClusters = append(diff.LKEClusters, LinodeObjectDiff{
+				ID:    lke.ID,
+				Label: lke.Label,
+				Diff:  getTagDiff(currTags, newTags),
+			})
+		}
 	}
 
 	// volumes
 	for _, volume := range loc.Volumes {
-		newTags := getNewTags(volume.Label, volume.Tags, config.Volumes)
+		currTags := volume.Tags
+		newTags, found := getNewTags(volume.Label, currTags, config.Volumes)
 
-		desiredNewTags.Volumes = append(desiredNewTags.Volumes, LinodeObjectDesiredTags{
-			ID:  volume.ID,
-			Old: volume.Tags,
-			New: newTags,
-		})
+		sort.Strings(currTags)
+		sort.Strings(newTags)
+		if found && !slices.Equal(currTags, newTags) {
+			desiredNewTags.Volumes = append(desiredNewTags.Volumes, LinodeObjectDesiredTags{
+				ID:  volume.ID,
+				Old: currTags,
+				New: newTags,
+			})
 
-		diff.Volumes = append(diff.Volumes, LinodeObjectDiff{
-			ID:    volume.ID,
-			Label: volume.Label,
-			Diff:  getTagDiff(volume.Tags, newTags),
-		})
+			diff.Volumes = append(diff.Volumes, LinodeObjectDiff{
+				ID:    volume.ID,
+				Label: volume.Label,
+				Diff:  getTagDiff(currTags, newTags),
+			})
+		}
 	}
 
 	// nodebalancers
 	for _, nb := range loc.NodeBalancers {
-		newTags := getNewTags(*nb.Label, nb.Tags, config.NodeBalancers)
+		currTags := nb.Tags
+		newTags, found := getNewTags(*nb.Label, currTags, config.NodeBalancers)
 
-		desiredNewTags.NodeBalancers = append(desiredNewTags.NodeBalancers, LinodeObjectDesiredTags{
-			ID:  nb.ID,
-			Old: nb.Tags,
-			New: newTags,
-		})
+		sort.Strings(currTags)
+		sort.Strings(newTags)
+		if found && !slices.Equal(currTags, newTags) {
+			desiredNewTags.NodeBalancers = append(desiredNewTags.NodeBalancers, LinodeObjectDesiredTags{
+				ID:  nb.ID,
+				Old: currTags,
+				New: newTags,
+			})
 
-		diff.NodeBalancers = append(diff.NodeBalancers, LinodeObjectDiff{
-			ID:    nb.ID,
-			Label: *nb.Label,
-			Diff:  getTagDiff(nb.Tags, newTags),
-		})
+			diff.NodeBalancers = append(diff.NodeBalancers, LinodeObjectDiff{
+				ID:    nb.ID,
+				Label: *nb.Label,
+				Diff:  getTagDiff(currTags, newTags),
+			})
+		}
 	}
 
 	return desiredNewTags, diff
