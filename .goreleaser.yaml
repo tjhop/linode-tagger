@@ -19,6 +19,15 @@ dockers:
     goos: linux
     goarch: amd64
     use: docker
+    build_flag_templates:
+    - "--pull"
+    - "--label=org.opencontainers.image.created={{.Date}}"
+    - "--label=org.opencontainers.image.title={{.ProjectName}}"
+    - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+    - "--label=org.opencontainers.image.version={{.Version}}"
+    - "--label=org.opencontainers.image.source=https://github.com/tjhop/linode-tagger"
+    - "--label=org.opencontainers.image.description='Tool to bulk enforce API tag sets on Linode API Objects'"
+    - "--label=org.opencontainers.image.licenses=MIT"
 archives:
   - replacements:
       darwin: Darwin
@@ -34,7 +43,7 @@ nfpms:
   - package_name: 'linode-tagger'
     homepage: 'https://github.com/tjhop/tagger'
     maintainer: 'TJ Hoplock <t.hoplock@gmail.com>'
-    description: 'Tool to bulk enforce API tag sets on Linode instances'
+    description: 'Tool to bulk enforce API tag sets on Linode API Objects'
     formats:
       - apk
       - deb
