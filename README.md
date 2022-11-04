@@ -10,7 +10,32 @@ Tagger is an application that can enforce the presence/absence of API tags in bu
 | Domains | `domains:read_write` |
 | LKEClusters | `lke:read_write` |
 
+## Motivation
+
+Tools like Terraform/Pulumi that are capable of programmatically managing all aspects of API resources are great -- but if there is already a large amount of infrastructure deployed (and the infrastructure isn't suitable to directly import to something like Terraform state as-is), it can be difficult to manage tags across API resources.
+
+API tags provide a powerful and flexible way to dynamically annotate infrastructure. With tools like [Prometheus](https://prometheus.io), you can even discover monitoring targets using [Linode Service Discovery](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#linode_sd_config) based on API tags.
+
+So it's helpful to be able to manage tags on Linode APIv4 resources en-masse -- but how can that be done in an idempotent and consistent way? This is where `tagger` comes into play. With tagger, you write a configuration file defining a list of tag rules for each of the various Linode APIv4 taggable objects (instances, domains, nodebalancers, volumes, LKE clusters). Each rule is a regex to be matched against the resource's human-readable label, and a list of tags that should be enforced as either `present` or `absent` on the resource. `tagger` is idempotent and doesn't update resources unless required, and can be run in `--dry-run` mode to see what changes are waiting. JSON output is provided as well with the `--json` flag for easy manipulation/inspection of the diffs and integration with other tools. Full help text:
+
+```bash
+docker run --rm ghcr.io/tjhop/linode-tagger -h
+Usage of /usr/bin/tagger:
+pflag: help requested
+      --config string          Path to configuration file to use
+      --dry-run                Don't apply the tag changes
+      --json                   Provide changes in JSON
+      --logging.level string   Logging level may be one of: trace, debug, info, warning, error, fatal and panic
+  -v, --version                Print version information about this build of tagger
+```
+
 ## Usage
+
+### Configuration
+
+
+Provide a Linode APIv4 token with appropriate scope(s) to tag your desired objects as an environment variable.
+
 
 ```bash
 LINODE_TOKEN="${your_api_token}" tagger --config /etc/tagger/tagger.yml
@@ -18,7 +43,7 @@ LINODE_TOKEN="${your_api_token}" tagger --config /etc/tagger/tagger.yml
 
 ### Docker Usage
 
-Provide a Linode APIv4 token with appropriate scope to tag your desired objects as an environment variable, along with a bind mount volume for the linode-tagger configuration.
+Provide a Linode APIv4 token with appropriate scope(s) to tag your desired objects as an environment variable, along with a bind mount volume for the linode-tagger configuration.
 
 ```
 docker run \
