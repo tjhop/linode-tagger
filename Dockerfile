@@ -1,4 +1,4 @@
-FROM golang:1.18-alpine
+FROM busybox:latest
 COPY tagger /usr/bin/tagger
 ENTRYPOINT ["/usr/bin/tagger"]
 CMD ["--config", "/etc/tagger/tagger.yml"]
