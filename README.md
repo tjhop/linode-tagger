@@ -1,5 +1,10 @@
 # Linode Tagger
 
+[![license](https://img.shields.io/github/license/tjhop/linode-tagger)](https://github.com/tjhop/linode-tagger/blob/master/LICENSE)
+[![Go Report Card](https://goreportcard.com/badge/github.com/tjhop/linode-tagger)](https://goreportcard.com/report/github.com/tjhop/linode-tagger)
+[![golangci-lint](https://github.com/tjhop/linode-tagger/actions/workflows/golangci-lint.yaml/badge.svg)](https://github.com/tjhop/linode-tagger/actions/workflows/golangci-lint.yaml)
+[![Latest Release](https://img.shields.io/github/v/release/tjhop/linode-tagger)](https://github.com/tjhop/linode-tagger/releases/latest)
+
 Tagger is an application that can enforce the presence/absence of API tags in bulk across all taggable Linode APIv4 resource objects:
 
 | Object Type | API Token Scopes Required |
@@ -16,7 +21,9 @@ Tools like Terraform/Pulumi that are capable of programmatically managing all as
 
 API tags provide a powerful and flexible way to dynamically annotate infrastructure. With tools like [Prometheus](https://prometheus.io), you can even discover monitoring targets using [Linode Service Discovery](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#linode_sd_config) based on API tags.
 
-So it's helpful to be able to manage tags on Linode APIv4 resources en-masse -- but how can that be done in an idempotent and consistent way? This is where `tagger` comes into play. With tagger, you write a configuration file defining a list of tag rules for each of the various Linode APIv4 taggable objects (instances, domains, nodebalancers, volumes, LKE clusters). Each rule is a regex to be matched against the resource's human-readable label, and a list of tags that should be enforced as either `present` or `absent` on the resource. `tagger` is idempotent and doesn't update resources unless required, and can be run in `--dry-run` mode to see what changes are waiting. JSON output is provided as well with the `--json` flag for easy manipulation/inspection of the diffs and integration with other tools. Full help text:
+So it's helpful to be able to manage tags on Linode APIv4 resources en-masse -- but how can that be done in an idempotent and consistent way? This is where `tagger` comes into play. With tagger, you write a configuration file defining a list of tag rules for each of the various Linode APIv4 taggable objects (instances, domains, nodebalancers, volumes, LKE clusters).
+
+Each rule is a regex to be matched against the resource's human-readable label, and a list of tags that should be enforced as either `present` or `absent` on the resource. `tagger` is idempotent and doesn't update resources unless required, and can be run in `--dry-run` mode to see what changes are waiting. JSON output is provided as well with the `--json` flag for easy manipulation/inspection of the diffs and integration with other tools. Full help text:
 
 ```bash
 docker run --rm ghcr.io/tjhop/linode-tagger -h
