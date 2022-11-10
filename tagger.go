@@ -229,11 +229,18 @@ func getNewTags(objectLabel string, tags []string, rules []TagRule) ([]string, b
 
 			if validRegex.MatchString(objectLabel) {
 				found = true
-				var newTags []string
+				var newTags, expandedAbsent, expandedPresent []string
+
+				for _, absent := range rule.Tags.Absent {
+					expandedAbsent = append(expandedAbsent, validRegex.ReplaceAllString(objectLabel, absent))
+				}
+				for _, present := range rule.Tags.Present {
+					expandedPresent = append(expandedPresent, validRegex.ReplaceAllString(objectLabel, present))
+				}
 
 				// check `absent` tags to remove unwanted tags
 				for _, tag := range tags {
-					if !slices.Contains(rule.Tags.Absent, tag) {
+					if !slices.Contains(expandedAbsent, tag) {
 						// if this tag is not on the `absent` list,
 						// we can persist it through to the new tag set
 						newTags = append(newTags, tag)
@@ -241,7 +248,7 @@ func getNewTags(objectLabel string, tags []string, rules []TagRule) ([]string, b
 				}
 
 				// check `present` tags to ensure specific tags exist
-				for _, tag := range rule.Tags.Present {
+				for _, tag := range expandedPresent {
 					// compare filter against `newTags`, as
 					// newTags == (the linode's tags - absent tags)
 					if !slices.Contains(newTags, tag) {
