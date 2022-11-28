@@ -521,10 +521,11 @@ func init() {
 }
 
 func version() {
-	fmt.Printf("Tagger Build Information\nVersion: %s\nBuild Date: %s\nCommit: %s\n",
+	fmt.Printf("Tagger Build Information\nVersion: %s\nBuild Date: %s\nCommit: %s\nGo Version: %s\n",
 		Version,
 		BuildDate,
 		Commit,
+		runtime.Version(),
 	)
 }
 
