@@ -41,6 +41,7 @@ type TaggerConfig struct {
 	NodeBalancers []TagRule `yaml:"nodebalancers"`
 	Domains       []TagRule `yaml:"domains"`
 	LKEClusters   []TagRule `yaml:"lke_clusters"`
+	Firewalls     []TagRule `yaml:"firewalls"`
 }
 
 // LinodeObjectCollection holds a slice of each type of
@@ -52,6 +53,7 @@ type LinodeObjectCollection struct {
 	NodeBalancers []linodego.NodeBalancer
 	Domains       []linodego.Domain
 	LKEClusters   []linodego.LKECluster
+	Firewalls     []linodego.Firewall
 }
 
 // LinodeObjectTags holds an object's ID, as well as the desired set of tags that it should have.
@@ -67,6 +69,7 @@ type LinodeObjectDesiredTagsCollection struct {
 	NodeBalancers []LinodeObjectDesiredTags
 	LKEClusters   []LinodeObjectDesiredTags
 	Volumes       []LinodeObjectDesiredTags
+	Firewalls     []LinodeObjectDesiredTags
 }
 
 // Diff contains a list of tags that have been added/removed from a given
@@ -88,6 +91,7 @@ type LinodeObjectCollectionDiff struct {
 	NodeBalancers []LinodeObjectDiff `json:"nodebalancers"`
 	LKEClusters   []LinodeObjectDiff `json:"lkeclusters"`
 	Volumes       []LinodeObjectDiff `json:"volumes"`
+	Firewalls     []LinodeObjectDiff `json:"firewalls"`
 }
 
 func newLinodeClient() linodego.Client {
@@ -192,6 +196,7 @@ func getLinodeObjectCollectionDiff(loc LinodeObjectCollection, desiredTags Linod
 			})
 		}
 	}
+
 	// nodebalancers
 	for _, old := range desiredTags.NodeBalancers {
 		for _, cur := range loc.NodeBalancers {
@@ -202,6 +207,21 @@ func getLinodeObjectCollectionDiff(loc LinodeObjectCollection, desiredTags Linod
 			diff.NodeBalancers = append(diff.NodeBalancers, LinodeObjectDiff{
 				ID:    cur.ID,
 				Label: *cur.Label,
+				Diff:  getTagDiff(old.Old, cur.Tags),
+			})
+		}
+	}
+
+	// firewalls
+	for _, old := range desiredTags.Firewalls {
+		for _, cur := range loc.Firewalls {
+			if old.ID != cur.ID {
+				continue
+			}
+
+			diff.Firewalls = append(diff.Firewalls, LinodeObjectDiff{
+				ID:    cur.ID,
+				Label: cur.Label,
 				Diff:  getTagDiff(old.Old, cur.Tags),
 			})
 		}
@@ -388,6 +408,28 @@ func compareAllObjectTagsAgainstConfig(loc LinodeObjectCollection, config Tagger
 		}
 	}
 
+	// firewalls
+	for _, firewall := range loc.Firewalls {
+		currTags := firewall.Tags
+		newTags, found := getNewTags(firewall.Label, currTags, config.Firewalls)
+
+		sort.Strings(currTags)
+		sort.Strings(newTags)
+		if found && !slices.Equal(currTags, newTags) {
+			desiredNewTags.Firewalls = append(desiredNewTags.Firewalls, LinodeObjectDesiredTags{
+				ID:  firewall.ID,
+				Old: currTags,
+				New: newTags,
+			})
+
+			diff.Firewalls = append(diff.Firewalls, LinodeObjectDiff{
+				ID:    firewall.ID,
+				Label: firewall.Label,
+				Diff:  getTagDiff(currTags, newTags),
+			})
+		}
+	}
+
 	return desiredNewTags, diff
 }
 
@@ -462,6 +504,20 @@ func updateAllObjectTags(ctx context.Context, client linodego.Client, desiredTag
 		}
 
 		loc.Volumes = append(loc.Volumes, *updatedVolume)
+	}
+
+	// update firewall tags
+	for _, f := range desiredTags.Firewalls {
+		updatedFirewall, err := client.UpdateFirewall(ctx, f.ID, linodego.FirewallUpdateOptions{Tags: &f.New})
+		if err != nil {
+			log.WithFields(log.Fields{
+				"id":    f.ID,
+				"error": err,
+			}).Error("Failed to update firewall tags")
+			return loc, err
+		}
+
+		loc.Firewalls = append(loc.Firewalls, *updatedFirewall)
 	}
 
 	return loc, nil
@@ -636,6 +692,14 @@ func tagger(config TaggerConfig) {
 			log.WithFields(log.Fields{"err": err}).Fatal("Failed to list lkeclusters")
 		}
 		loc.LKEClusters = lkeclusters
+	}
+
+	if len(config.Firewalls) > 0 {
+		firewalls, err := client.ListFirewalls(ctx, nil)
+		if err != nil {
+			log.WithFields(log.Fields{"err": err}).Fatal("Failed to list firewalls")
+		}
+		loc.Firewalls = firewalls
 	}
 
 	log.Info("Checking linode object tags against config file")
