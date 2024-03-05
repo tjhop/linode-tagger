@@ -14,6 +14,7 @@ Tagger is an application that can enforce the presence/absence of API tags in bu
 | NodeBalancers | `nodebalancers:read_write` |
 | Domains | `domains:read_write` |
 | LKEClusters | `lke:read_write` |
+| Firewalls | `firewall:read_write` |
 
 ## Motivation
 
@@ -21,7 +22,7 @@ Tools like Terraform/Pulumi that are capable of programmatically managing all as
 
 API tags provide a powerful and flexible way to dynamically annotate infrastructure. With tools like [Prometheus](https://prometheus.io), you can even discover monitoring targets using [Linode Service Discovery](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#linode_sd_config) based on API tags.
 
-So it's helpful to be able to manage tags on Linode APIv4 resources en-masse -- but how can that be done in an idempotent and consistent way? This is where `tagger` comes into play. With tagger, you write a configuration file defining a list of tag rules for each of the various Linode APIv4 taggable objects (instances, domains, nodebalancers, volumes, LKE clusters).
+So it's helpful to be able to manage tags on Linode APIv4 resources en-masse -- but how can that be done in an idempotent and consistent way? This is where `tagger` comes into play. With tagger, you write a configuration file defining a list of tag rules for each of the various Linode APIv4 taggable objects (instances, domains, nodebalancers, volumes, LKE clusters, firewalls).
 
 Each rule is a regex to be matched against the resource's human-readable label, and a list of tags that should be enforced as either `present` or `absent` on the resource. `tagger` is idempotent and doesn't update resources unless required, and can be run in `--dry-run` mode to see what changes are waiting. JSON output is provided as well with the `--json` flag for easy manipulation/inspection of the diffs and integration with other tools. Full help text:
 
