@@ -62,5 +62,13 @@ changelog:
       - '^ci(?:\(\w+\))?\!?:'
       - '^docs(?:\(\w+\))?\!?:'
       - '^test(?:\(\w+\))?\!?:'
-      - '^chore(?:\(\w+\))?\!?:'
       - '^style(?:\(\w+\))?\!?:'
+  groups:
+    - title: "New Features And Changes"
+      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
+      order: 0
+    - title: "Fixes"
+      regexp: '^.*?fix(\([[:word:]]+\))??!?:.+$'
+      order: 1
+    - title: "Other Changes"
+      order: 999
