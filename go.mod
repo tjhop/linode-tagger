@@ -3,7 +3,7 @@ module github.com/tjhop/linode-tagger
 go 1.18
 
 require (
-	github.com/linode/linodego v1.29.0
+	github.com/linode/linodego v1.30.0
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/pflag v1.0.5
 	github.com/spf13/viper v1.18.2
