@@ -28,13 +28,6 @@ dockers:
     - "--label=org.opencontainers.image.source=https://github.com/tjhop/linode-tagger"
     - "--label=org.opencontainers.image.description='Tool to bulk enforce API tag sets on Linode API Objects'"
     - "--label=org.opencontainers.image.licenses=MIT"
-archives:
-  - replacements:
-      darwin: Darwin
-      linux: Linux
-      windows: Windows
-      386: i386
-      amd64: x86_64
 checksum:
   name_template: 'checksums.txt'
 snapshot:
