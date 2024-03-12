@@ -288,6 +288,7 @@ func getNewTags(objectLabel string, tags []string, rules []TagRule) ([]string, b
 			}
 		}
 
+		sort.Strings(combinedNewTags)
 		return combinedNewTags, found
 	}
 
@@ -536,6 +537,7 @@ func sliceDifference(a, b []string) []string {
 			diff = append(diff, x)
 		}
 	}
+	sort.Strings(diff)
 	return diff
 }
 
