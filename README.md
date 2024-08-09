@@ -4,6 +4,7 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/tjhop/linode-tagger)](https://goreportcard.com/report/github.com/tjhop/linode-tagger)
 [![golangci-lint](https://github.com/tjhop/linode-tagger/actions/workflows/golangci-lint.yaml/badge.svg)](https://github.com/tjhop/linode-tagger/actions/workflows/golangci-lint.yaml)
 [![Latest Release](https://img.shields.io/github/v/release/tjhop/linode-tagger)](https://github.com/tjhop/linode-tagger/releases/latest)
+[![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/tjhop/linode-tagger/total)](https://github.com/tjhop/linode-tagger/releases/latest)
 
 Tagger is an application that can enforce the presence/absence of API tags in bulk across all taggable Linode APIv4 resource objects:
 
