@@ -4,17 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
 	"runtime"
 	"sort"
+	"strings"
 
 	"github.com/linode/linodego"
-	log "github.com/sirupsen/logrus"
-	"github.com/sirupsen/logrus/hooks/writer"
 	flag "github.com/spf13/pflag"
 	"github.com/spf13/viper"
 	"golang.org/x/exp/slices"
@@ -97,7 +96,8 @@ type LinodeObjectCollectionDiff struct {
 func newLinodeClient() linodego.Client {
 	apiKey, ok := os.LookupEnv("LINODE_TOKEN")
 	if !ok {
-		log.Fatal("Could not find LINODE_TOKEN environment variable, please assert it is set.")
+		slog.Error("Could not find LINODE_TOKEN environment variable, please assert it is set.")
+		os.Exit(1)
 	}
 	tokenSource := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: apiKey})
 
@@ -108,10 +108,12 @@ func newLinodeClient() linodego.Client {
 	}
 
 	client := linodego.NewClient(oauth2Client)
-	// linode api debug output is a firehose, only enable at trace
-	if log.IsLevelEnabled(log.TraceLevel) {
+	// linode api debug output is a firehose, only enable if the
+	// environment variable `TAGGER_LINODE_CLIENT_DEBUG` is populated
+	if _, ok := os.LookupEnv("TAGGER_LINODE_CLIENT_DEBUG"); ok {
 		client.SetDebug(true)
 	}
+
 	return client
 }
 
@@ -441,10 +443,7 @@ func updateAllObjectTags(ctx context.Context, client linodego.Client, desiredTag
 	for _, i := range desiredTags.Instances {
 		updatedInstance, err := client.UpdateInstance(ctx, i.ID, linodego.InstanceUpdateOptions{Tags: &i.New})
 		if err != nil {
-			log.WithFields(log.Fields{
-				"id":    i.ID,
-				"error": err,
-			}).Error("Failed to update instance tags")
+			slog.Error("Failed to update instance tags", "err", err, "id", i.ID)
 			return loc, err
 		}
 
@@ -455,10 +454,7 @@ func updateAllObjectTags(ctx context.Context, client linodego.Client, desiredTag
 	for _, d := range desiredTags.Domains {
 		updatedDomain, err := client.UpdateDomain(ctx, d.ID, linodego.DomainUpdateOptions{Tags: d.New})
 		if err != nil {
-			log.WithFields(log.Fields{
-				"id":    d.ID,
-				"error": err,
-			}).Error("Failed to update domain tags")
+			slog.Error("Failed to update domain tags", "err", err, "id", d.ID)
 			return loc, err
 		}
 
@@ -469,10 +465,7 @@ func updateAllObjectTags(ctx context.Context, client linodego.Client, desiredTag
 	for _, nb := range desiredTags.NodeBalancers {
 		updatedNodeBalancer, err := client.UpdateNodeBalancer(ctx, nb.ID, linodego.NodeBalancerUpdateOptions{Tags: &nb.New})
 		if err != nil {
-			log.WithFields(log.Fields{
-				"id":    nb.ID,
-				"error": err,
-			}).Error("Failed to update nodebalancer tags")
+			slog.Error("Failed to update nodebalancer tags", "err", err, "id", nb.ID)
 			return loc, err
 		}
 
@@ -483,10 +476,7 @@ func updateAllObjectTags(ctx context.Context, client linodego.Client, desiredTag
 	for _, lke := range desiredTags.LKEClusters {
 		updatedLKECluster, err := client.UpdateLKECluster(ctx, lke.ID, linodego.LKEClusterUpdateOptions{Tags: &lke.New})
 		if err != nil {
-			log.WithFields(log.Fields{
-				"id":    lke.ID,
-				"error": err,
-			}).Error("Failed to update LKE Cluster tags")
+			slog.Error("Failed to update LKE Cluster tags", "err", err, "id", lke.ID)
 			return loc, err
 		}
 
@@ -497,10 +487,7 @@ func updateAllObjectTags(ctx context.Context, client linodego.Client, desiredTag
 	for _, v := range desiredTags.Volumes {
 		updatedVolume, err := client.UpdateVolume(ctx, v.ID, linodego.VolumeUpdateOptions{Tags: &v.New})
 		if err != nil {
-			log.WithFields(log.Fields{
-				"id":    v.ID,
-				"error": err,
-			}).Error("Failed to update v Cluster tags")
+			slog.Error("Failed to update v Cluster tags", "err", err, "id", v.ID)
 			return loc, err
 		}
 
@@ -511,10 +498,7 @@ func updateAllObjectTags(ctx context.Context, client linodego.Client, desiredTag
 	for _, f := range desiredTags.Firewalls {
 		updatedFirewall, err := client.UpdateFirewall(ctx, f.ID, linodego.FirewallUpdateOptions{Tags: &f.New})
 		if err != nil {
-			log.WithFields(log.Fields{
-				"id":    f.ID,
-				"error": err,
-			}).Error("Failed to update firewall tags")
+			slog.Error("Failed to update firewall tags", "err", err, "id", f.ID)
 			return loc, err
 		}
 
@@ -551,23 +535,6 @@ func genJSON(diff LinodeObjectCollectionDiff) error {
 	return nil
 }
 
-func init() {
-	// init logging
-	log.SetOutput(io.Discard) // Send all logs to nowhere by default
-
-	log.AddHook(&writer.Hook{ // Send logs to stderr, makes it easier to pipe stdout to jq for --json
-		Writer: os.Stderr,
-		LogLevels: []log.Level{
-			log.PanicLevel,
-			log.FatalLevel,
-			log.ErrorLevel,
-			log.WarnLevel,
-			log.InfoLevel,
-			log.DebugLevel,
-		},
-	})
-}
-
 func version() {
 	fmt.Printf("Tagger Build Information\nVersion: %s\nBuild Date: %s\nCommit: %s\nGo Version: %s\n",
 		Version,
@@ -580,15 +547,23 @@ func version() {
 func main() {
 	// prep and parse flags
 	flag.String("config", "", "Path to configuration file to use")
-	flag.String("logging.level", "", "Logging level may be one of: trace, debug, info, warning, error, fatal and panic")
+	flag.String("logging.level", "", "Logging level may be one of: [debug, info, warn, error]")
 	flag.Bool("dry-run", false, "Don't apply the tag changes")
 	flag.Bool("json", false, "Provide changes in JSON")
 	flag.BoolP("version", "v", false, "Print version information about this build of tagger")
 
 	flag.Parse()
 	if err := viper.BindPFlags(flag.CommandLine); err != nil {
-		log.Fatal("Unable to bind flags")
+		panic(fmt.Errorf("Failed to parse command line flags: %s\n", err.Error()))
 	}
+
+	logLevel := slog.LevelVar{}
+	logHandlerOpts := &slog.HandlerOptions{
+		Level:     &logLevel,
+		AddSource: true,
+	}
+	logger := slog.New(slog.NewTextHandler(os.Stderr, logHandlerOpts))
+	slog.SetDefault(logger)
 
 	if viper.GetBool("version") {
 		version()
@@ -610,48 +585,43 @@ func main() {
 
 	if err := viper.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
-			log.Fatal("Unable to find configuration file")
+			slog.Error("Unable to find configuration file")
+			os.Exit(1)
 		} else {
-			log.WithFields(log.Fields{
-				"err": err,
-			}).Fatal("Unable to read configuration file")
+			slog.Error("Unable to read configuration file", "err", err)
+			os.Exit(1)
 		}
 	}
 
 	var config TaggerConfig
 	if err := viper.UnmarshalKey("tagger", &config); err != nil {
-		log.WithFields(log.Fields{
-			"err": err,
-		}).Fatal("Unable to marshal config file to struct")
+		slog.Error("Unable to marshal config file to struct", "err", err)
+		os.Exit(1)
 	}
 
-	// set log level based on config
-	level, err := log.ParseLevel(viper.GetString("logging.level"))
-	if err != nil {
-		// if log level couldn't be parsed from config, default to info level
-		log.SetLevel(log.InfoLevel)
-	} else {
-		log.SetLevel(level)
-		if level >= log.DebugLevel {
-			// enable func/file logging
-			log.SetReportCaller(true)
-			log.SetFormatter(&log.TextFormatter{
-				CallerPrettyfier: func(f *runtime.Frame) (string, string) {
-					fileName := filepath.Base(f.File)
-					funcName := filepath.Base(f.Function)
-					return fmt.Sprintf("%s()", funcName), fmt.Sprintf("%s:%d", fileName, f.Line)
-				},
-			})
-		}
-
-		log.Infof("Log level set to: %s", level)
+	// parse log level from flag/config
+	logLevelFlagVal := strings.ToLower(viper.GetString("logging.level"))
+	switch logLevelFlagVal {
+	case "":
+		logLevel.Set(slog.LevelInfo)
+		logger.Warn("Log level flag not set, defaulting to <info> level")
+	case "info": // default is info, we're good
+	case "warn":
+		logLevel.Set(slog.LevelWarn)
+	case "debug":
+		logLevel.Set(slog.LevelDebug)
+	case "error":
+		logLevel.Set(slog.LevelError)
+	default:
+		logLevel.Set(slog.LevelInfo)
+		logger.Warn("Failed to parse log level from flag, defaulting to <info> level", "err", "Unsupported log level", "log_level", logLevelFlagVal)
 	}
 
 	tagger(config)
 }
 
 func tagger(config TaggerConfig) {
-	log.Info("Gathering objects on this account")
+	slog.Info("Gathering objects on this account")
 	client := newLinodeClient()
 	ctx := context.Background()
 
@@ -659,7 +629,8 @@ func tagger(config TaggerConfig) {
 	if len(config.Instances) > 0 {
 		linodes, err := client.ListInstances(ctx, nil)
 		if err != nil {
-			log.WithFields(log.Fields{"err": err}).Fatal("Failed to list linodes")
+			slog.Error("Failed to list linodes", "err", err)
+			os.Exit(1)
 		}
 		loc.Instances = linodes
 	}
@@ -667,7 +638,8 @@ func tagger(config TaggerConfig) {
 	if len(config.Volumes) > 0 {
 		volumes, err := client.ListVolumes(ctx, nil)
 		if err != nil {
-			log.WithFields(log.Fields{"err": err}).Fatal("Failed to list volumes")
+			slog.Error("Failed to list volumes", "err", err)
+			os.Exit(1)
 		}
 		loc.Volumes = volumes
 	}
@@ -675,7 +647,8 @@ func tagger(config TaggerConfig) {
 	if len(config.NodeBalancers) > 0 {
 		nodebalancers, err := client.ListNodeBalancers(ctx, nil)
 		if err != nil {
-			log.WithFields(log.Fields{"err": err}).Fatal("Failed to list nodebalancers")
+			slog.Error("Failed to list nodebalancers", "err", err)
+			os.Exit(1)
 		}
 		loc.NodeBalancers = nodebalancers
 	}
@@ -683,7 +656,8 @@ func tagger(config TaggerConfig) {
 	if len(config.Domains) > 0 {
 		domains, err := client.ListDomains(ctx, nil)
 		if err != nil {
-			log.WithFields(log.Fields{"err": err}).Fatal("Failed to list domains")
+			slog.Error("Failed to list domains", "err", err)
+			os.Exit(1)
 		}
 		loc.Domains = domains
 	}
@@ -691,7 +665,8 @@ func tagger(config TaggerConfig) {
 	if len(config.LKEClusters) > 0 {
 		lkeclusters, err := client.ListLKEClusters(ctx, nil)
 		if err != nil {
-			log.WithFields(log.Fields{"err": err}).Fatal("Failed to list lkeclusters")
+			slog.Error("Failed to list lkeclusters", "err", err)
+			os.Exit(1)
 		}
 		loc.LKEClusters = lkeclusters
 	}
@@ -699,32 +674,29 @@ func tagger(config TaggerConfig) {
 	if len(config.Firewalls) > 0 {
 		firewalls, err := client.ListFirewalls(ctx, nil)
 		if err != nil {
-			log.WithFields(log.Fields{"err": err}).Fatal("Failed to list firewalls")
+			slog.Error("Failed to list firewalls", "err", err)
+			os.Exit(1)
 		}
 		loc.Firewalls = firewalls
 	}
 
-	log.Info("Checking linode object tags against config file")
+	slog.Info("Checking linode object tags against config file")
 	desiredTags, tagDiff := compareAllObjectTagsAgainstConfig(loc, config)
 
 	if !viper.GetBool("dry-run") {
-		log.Info("Applying new tags to objects that need updating")
+		slog.Info("Applying new tags to objects that need updating")
 		newLoc, err := updateAllObjectTags(ctx, client, desiredTags)
 		if err != nil {
-			log.WithFields(log.Fields{
-				"err": err,
-			}).Error("Failed to apply new tag sets to objects")
+			slog.Error("Failed to apply new tag sets to objects", "err", err)
 		}
 		tagDiff = getLinodeObjectCollectionDiff(newLoc, desiredTags)
 	} else {
-		log.Info("Dry run enabled, not applying tags.")
+		slog.Info("Dry run enabled, not applying tags.")
 	}
 
 	if viper.GetBool("json") {
 		if err := genJSON(tagDiff); err != nil {
-			log.WithFields(log.Fields{
-				"err": err,
-			}).Error("Failed to generate JSON report output")
+			slog.Error("Failed to generate JSON report output", "err", err)
 		}
 	}
 }

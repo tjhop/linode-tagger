@@ -34,7 +34,7 @@ pflag: help requested
       --config string          Path to configuration file to use
       --dry-run                Don't apply the tag changes
       --json                   Provide changes in JSON
-      --logging.level string   Logging level may be one of: trace, debug, info, warning, error, fatal and panic
+      --logging.level string   Logging level may be one of: [debug, info, warn, error]
   -v, --version                Print version information about this build of tagger
 ```
 
